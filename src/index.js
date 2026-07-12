@@ -8,6 +8,8 @@ if (process.env.DATABASE_URL) {
   process.env.DATABASE_URL = process.env.DATABASE_URL.trim();
 }
 console.log('DB URL present?', !!process.env.DATABASE_URL);
+console.log('DATABASE_URL raw length:', process.env.DATABASE_URL?.length);
+console.log('DATABASE_URL start:', process.env.DATABASE_URL?.substring(0, 30));
 
 const { sequelize } = require('./models');
 const stockRoutes = require('./routes/stocks');
