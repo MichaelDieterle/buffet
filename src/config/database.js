@@ -1,7 +1,7 @@
-const { Sequelize } = require('sequelize');
+﻿const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
-const config = {
+let config = {
   development: {
     username: process.env.DB_USER,
     password: process.env.DB_PASS,
@@ -31,5 +31,32 @@ const config = {
     logging: false,
   }
 };
+
+if (process.env.DATABASE_URL) {
+  const url = new URL(process.env.DATABASE_URL);
+  const env = process.env.NODE_ENV || 'development';
+  const dbConfig = {
+    username: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database: url.pathname.slice(1),
+    host: url.hostname,
+    port: parseInt(url.port, 10),
+    dialect: 'postgres',
+    dialectOptions: {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false
+      }
+    },
+    logging: false
+  };
+  if (config[env]) {
+    config[env] = dbConfig;
+  } else {
+    config.development = dbConfig;
+    config.test = dbConfig;
+    config.production = dbConfig;
+  }
+}
 
 module.exports = config;
