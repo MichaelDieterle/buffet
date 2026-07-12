@@ -2,13 +2,13 @@
   "name": "stock-tracking-app",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "server": "nodemon src/server.js",
+    "server": "nodemon src/index.js",
     "client": "npm run dev --prefix client",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "start": "node src/server.js"
+    "start": "node src/index.js"
   },
   "keywords": [],
   "author": "",
