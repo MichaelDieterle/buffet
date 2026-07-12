@@ -34,6 +34,7 @@ app.get('/', (req, res) => {
 
 // Sync DB and start server
 const startServer = async () => {
+  let dbConnected = false;
   try {
     // Adjust: set force: false in production
     await sequelize.authenticate();
@@ -41,18 +42,19 @@ const startServer = async () => {
     // Uncomment next line if you want to sync models (creates tables if not exist)
     await sequelize.sync({ alter: true }); // use alter to adjust columns without dropping
     console.log('Database synced.');
+    dbConnected = true;
 
     if (process.env.DISABLE_REFRESH_JOB !== 'true') {
       refreshJob.start();
     }
-
-    app.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
-    });
   } catch (err) {
-    console.error('Unable to start server:', err);
-    process.exit(1);
+    console.error('Unable to connect to database:', err);
+    console.warn('Starting server without database connectivity');
   }
+
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
 };
 
 startServer();
