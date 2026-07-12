@@ -3,6 +3,10 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 require('dotenv').config();
+// Trim DATABASE_URL to avoid whitespace/newline issues
+if (process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = process.env.DATABASE_URL.trim();
+}
 console.log('DB URL present?', !!process.env.DATABASE_URL);
 
 const { sequelize } = require('./models');
