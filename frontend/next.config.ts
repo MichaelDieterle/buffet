@@ -1,8 +1,11 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  // Ensure we can access the API base via env variable
-  env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+﻿import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  output: "standalone",
+  reactStrictMode: true,
+  swcMinify: true,
+  images: {
+    domains: [],
   },
 };
 
