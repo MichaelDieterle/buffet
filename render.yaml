@@ -1,6 +1,21 @@
-﻿services:
+services:
   - type: web
-    name: stock-tracking-app
+    name: buffet-frontend
     env: node
-    buildCommand: npm install
+    rootDir: frontend
+    buildCommand: npm install && npm run build
     startCommand: npm start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://buffet-backend.onrender.com   # set in Render dashboard
+  - type: web
+    name: buffet-backend
+    env: node
+    rootDir: .
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false

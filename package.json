@@ -1,35 +1,38 @@
 {
-  "name": "stock-tracking-app",
-  "version": "1.0.0",
-  "description": "",
-  "main": "src/index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "server": "nodemon src/index.js",
-    "client": "npm run dev --prefix client",
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "start": "node src/index.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "dependencies": {
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "helmet": "^8.2.0",
-    "morgan": "^1.11.0",
-    "node-cache": "^5.1.2",
-    "node-cron": "^4.6.0",
-    "pg": "^8.22.0",
-    "pg-hstore": "^2.3.4",
-    "sequelize": "^6.37.8",
-    "technicalindicators": "^3.1.0",
-    "yahoo-finance2": "^4.0.0"
-  },
-  "devDependencies": {
-    "concurrently": "^9.2.4",
-    "nodemon": "^3.1.4"
-  }
+    "name":  "stock-tracking-app",
+    "version":  "1.0.0",
+    "description":  "",
+    "main":  "src/index.js",
+    "scripts":  {
+                    "test":  "echo \"Error: no test specified\" \u0026\u0026 exit 1",
+                    "server":  "nodemon src/index.js",
+                    "client":  "npm run dev --prefix client",
+                    "dev":  "concurrently \"npm run server\" \"npm run client\"",
+                    "start":  "node src/index.js",
+                    "build":  "echo \"No build step required\""
+                },
+    "keywords":  [
+
+                 ],
+    "author":  "",
+    "license":  "ISC",
+    "type":  "commonjs",
+    "dependencies":  {
+                         "cors":  "^2.8.6",
+                         "dotenv":  "^17.4.2",
+                         "express":  "^5.2.1",
+                         "helmet":  "^8.2.0",
+                         "morgan":  "^1.11.0",
+                         "node-cache":  "^5.1.2",
+                         "node-cron":  "^4.6.0",
+                         "pg":  "^8.22.0",
+                         "pg-hstore":  "^2.3.4",
+                         "sequelize":  "^6.37.8",
+                         "technicalindicators":  "^3.1.0",
+                         "yahoo-finance2":  "^4.0.0"
+                     },
+    "devDependencies":  {
+                            "concurrently":  "^9.2.4",
+                            "nodemon":  "^3.1.4"
+                        }
 }
