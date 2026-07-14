@@ -11,18 +11,20 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     
-    /* Bundler mode */
-    "moduleResolution": "bundler",
+    /* Node.js mode for better compatibility */
+    "moduleResolution": "node",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
-    "moduleDetection": "force",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "noEmit": true,
     
     /* Linting */
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "types": ["vite/client", "react", "react-dom"]
   },
   "include": ["src"]
 }
