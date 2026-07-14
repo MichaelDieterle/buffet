@@ -1,16 +1,5 @@
 services:
   - type: web
-    name: buffet-frontend
-    env: node
-    rootDir: frontend
-    buildCommand: npm install && npm run build
-    startCommand: npm start
-    envVars:
-      - key: NEXT_PUBLIC_API_URL
-        value: https://buffet-backend.onrender.com   # set in Render dashboard
-      - key: NPM_CONFIG_PRODUCTION
-        value: "false"
-  - type: web
     name: buffet-backend
     env: node
     rootDir: .

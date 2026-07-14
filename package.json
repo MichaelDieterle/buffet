@@ -8,8 +8,8 @@
                     "server":  "nodemon src/server.js",
                     "client":  "npm run dev --prefix client",
                     "dev":  "concurrently \"npm run server\" \"npm run client\"",
-                    "start":  "npm install --prefix client && npm run build --prefix client && node src/server.js",
-                    "build":  "echo \"No build step required\""
+    "start": "node src/server.js",
+    "build": "npm install --prefix client && npm run build --prefix client",
                 },
     "keywords":  [
 
@@ -36,3 +36,4 @@
                             "nodemon":  "^3.1.4"
                         }
 }
+
