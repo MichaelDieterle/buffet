@@ -20,13 +20,16 @@ export async function refreshStock(symbol: string) {
   return api.post(`/stocks/${symbol}/refresh`).then(r => r.data);
 }
 export async function searchYahoo(query: string) {
-  return api.get(`/stocks/search/${encodeURIComponent(query)}`).then(r => r.data);
+  return api.get(`/stocks/${query}`).then(r => r.data);
 }
 export async function createStock(payload: { symbol: string; name: string; sector?: string; industry?: string }) {
   return api.post('/stocks', payload).then(r => r.data);
 }
 export function exportCsvUrl(symbol: string) {
-  return `/api/stocks/${encodeURIComponent(symbol)}/export.csv`;
+  return `/api/stocks/${symbol}/export.csv`;
+}
+export async function fetchIndicators(symbol: string) {
+  return api.get(`/stocks/${symbol}/indicators`).then(r => r.data);
 }
 
 export default api;

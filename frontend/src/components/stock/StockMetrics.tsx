@@ -27,23 +27,23 @@ export default function StockMetrics({ metrics }: StockMetricsProps) {
       <div className="space-y-2 text-sm">
         <div className="flex justify-between">
           <span className="text-gray-400">P/E Ratio</span>
-          <span className="text-gray-100">{peRatio !== null ? peRatio.toFixed(2) : "N/A"}</span>
+          <span className="text-gray-100">{peRatio?.toFixed(2) ?? "N/A"}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-gray-400">P/B Ratio</span>
-          <span className="text-gray-100">{pbRatio !== null ? pbRatio.toFixed(2) : "N/A"}</span>
+          <span className="text-gray-100">{pbRatio?.toFixed(2) ?? "N/A"}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-gray-400">Dividend Yield</span>
-          <span className="text-gray-100">{dividendYield !== null ? `${(dividendYield * 100).toFixed(2)}%` : "N/A"}</span>
+          <span className="text-gray-100">{dividendYield == null ? "N/A" : ((dividendYield * 100).toFixed(2) + "%")}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-gray-400">EPS</span>
-          <span className="text-gray-100">{eps !== null ? eps.toFixed(2) : "N/A"}</span>
+          <span className="text-gray-100">{eps?.toFixed(2) ?? "N/A"}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-gray-400">Beta</span>
-          <span className="text-gray-100">{beta !== null ? beta.toFixed(2) : "N/A"}</span>
+          <span className="text-gray-100">{beta?.toFixed(2) ?? "N/A"}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-gray-400">Market Cap</span>

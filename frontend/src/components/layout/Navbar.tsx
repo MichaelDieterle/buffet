@@ -1,14 +1,18 @@
-import Link from "next/link";
+"use client";
+
 import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function Navbar() {
   const [query, setQuery] = useState("");
+  const router = useRouter();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (query.trim()) {
-      // Navigate to stock page
-      window.location.href = `/stock/${query.trim().toUpperCase()}`;
+    const trimmed = query.trim();
+    if (trimmed) {
+      router.push(`/stock/${trimmed.toUpperCase()}`);
     }
   };
 
