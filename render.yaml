@@ -8,6 +8,8 @@ services:
     envVars:
       - key: NEXT_PUBLIC_API_URL
         value: https://buffet-backend.onrender.com   # set in Render dashboard
+      - key: NPM_CONFIG_PRODUCTION
+        value: "false"
   - type: web
     name: buffet-backend
     env: node
@@ -19,3 +21,5 @@ services:
         sync: false
       - key: REDIS_URL
         sync: false
+      - key: NPM_CONFIG_PRODUCTION
+        value: "false"
