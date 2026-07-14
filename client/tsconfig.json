@@ -1,4 +1,4 @@
-{
+﻿{
   "compilerOptions": {
     "target": "es2023",
     "module": "esnext",
@@ -10,21 +10,16 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    
-    /* Node.js mode for better compatibility */
     "moduleResolution": "node",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
-    "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "noEmit": true,
-    
-    /* Linting */
+    "types": ["vite/client", "react", "react-dom"],
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true,
-    "types": ["vite/client", "react", "react-dom"]
+    "noFallthroughCasesInSwitch": true
   },
   "include": ["src"]
 }
