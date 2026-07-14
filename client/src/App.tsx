@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+ï»¿import { useEffect, useState } from "react";
 import api, {
   fetchQuote,
   fetchFundamentals,
@@ -9,6 +9,7 @@ import api, {
   createStock,
   exportCsvUrl,
   fetchIndicators,
+} from "./api";
 import { Fundamentals } from "./components/Fundamentals";
 type Stock = { id: number; symbol: string; name: string; sector?: string; industry?: string };
 type SearchResult = { symbol: string; name: string; exchange: string };
@@ -17,6 +18,7 @@ type Quote = {
   dayHigh: number | null; dayLow: number | null; yearHigh: number | null; yearLow: number | null;
   volume: number | null; marketCap: number | null; previousClose: number | null;
   currency: string; exchangeName?: string; marketState?: string; timestamp?: string;
+} | null;
 type Fundamentals = {
   peRatio: number | null; forwardPe: number | null; pegRatio: number | null;
   pbRatio: number | null; psRatio: number | null; eps: number | null; forwardEps: number | null;
@@ -43,13 +45,16 @@ type Fundamentals = {
   businessSummary: string | null; employees: number | null; website: string | null;
   country: string | null; city: string | null; sector: string | null; industry: string | null;
   fiscalYearEnd: string | null;
+} | null;
 type NewsItem = {
   uuid: string; title: string; publisher: string; link: string;
   publishedAt: string; type: "company" | "geopolitics"; relatedTickers: string[]; thumbnail?: string;
+};
 type NewsData = {
   all: NewsItem[];
   company: NewsItem[];
   geopolitics: NewsItem[];
+};
 type CalendarEvent = {
   type: string;
   date: string | null;
@@ -61,8 +66,10 @@ type CalendarEvent = {
   earningsHigh?: number | null;
   revenueAverage?: number | null;
   description?: string | null;
+};
 type CalendarData = {
   events: CalendarEvent[];
+};
 type IndicatorData = {
   sma_20: number | null;
   sma_50: number | null;
@@ -72,12 +79,15 @@ type IndicatorData = {
   macd: number | null;
   macd_signal: number | null;
   macd_hist: number | null;
+};
 function fmt(n: number | null | undefined, digits = 2) {
   if (n == null || !Number.isFinite(n)) return "-";
   return n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
 function pct(n: number | null | undefined) {
   if (n == null || !Number.isFinite(n)) return "-";
   return (n * 100).toFixed(2) + "%";
+}
 function big(n: number | null | undefined) {
   if (n == null || !Number.isFinite(n)) return "-";
   const abs = Math.abs(n);
@@ -86,9 +96,11 @@ function big(n: number | null | undefined) {
   if (abs >= 1e6) return (n / 1e6).toFixed(2) + "M";
   if (abs >= 1e3) return (n / 1e3).toFixed(2) + "K";
   return String(n);
+}
 function dateShort(s: string | null | undefined) {
   if (!s) return "-";
   return new Date(s).toLocaleString();
+}
 function relTime(s: string | null | undefined) {
   if (!s) return "gerade eben";
   const d = new Date(s).getTime();
@@ -100,6 +112,7 @@ function relTime(s: string | null | undefined) {
   if (h < 24) return h + " h";
   const t = Math.floor(h / 24);
   return t + " d";
+}
 function App() {
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -111,8 +124,12 @@ function App() {
     try {
       const res = await api.get<Stock[]>("/stocks");
       setStocks(res.data);
+    } catch (err: any) {
       setError("Failed to load stocks");
+    } finally {
       setLoading(false);
+    }
+  };
   useEffect(() => { load(); }, []);
   const filtered = search
     ? stocks.filter(s => s.symbol.toUpperCase().includes(search.toUpperCase()) || s.name.toLowerCase().includes(search.toLowerCase()))
@@ -162,12 +179,13 @@ function App() {
           {selected ? (
             <StockDetail symbol={selected} />
           ) : (
-            <div className="placeholder">Wähle einen Stock aus der Liste</div>
+            <div className="placeholder">WÃ¤hle einen Stock aus der Liste</div>
           )}
         </div>
       </div>
     </div>
   );
+}function AddStockDialog({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -178,13 +196,16 @@ function App() {
     try {
       const r = await searchYahoo(q);
       setResults(r);
+    } finally { setLoading(false); }
+  };
   const pick = async (r: SearchResult) => {
     await createStock({ symbol: r.symbol, name: r.name });
     setOpen(false);
     setQ("");
     setResults([]);
     onCreated();
-  if (!open) return <button className="add-btn" onClick={() => setOpen(true)}>+ Stock hinzufügen</button>;
+  };
+  if (!open) return <button className="add-btn" onClick={() => setOpen(true)}>+ Stock hinzufÃ¼gen</button>;
   return (
     <div className="add-dialog">
       <input
@@ -195,16 +216,17 @@ function App() {
         onKeyDown={e => { if (e.key === "Enter") doSearch(); }}
       />
       <button onClick={doSearch} disabled={loading}>Suchen</button>
-      <button onClick={() => setOpen(false)}>?</button>
+      <button onClick={() => setOpen(false)}>âœ•</button>
       <div className="add-results">
         {results.map(r => (
           <div key={r.symbol} className="add-result" onClick={() => pick(r)}>
-            <strong>{r.symbol}</strong> — {r.name} <span className="muted">{r.exchange}</span>
+            <strong>{r.symbol}</strong> â€” {r.name} <span className="muted">{r.exchange}</span>
           </div>
         ))}
       </div>
     </div>
   );
+}
 function StockDetail({ symbol }: { symbol: string }) {
   const [tab, setTab] = useState<"overview" | "fundamentals" | "news" | "calendar" | "indicators">("overview");
   const [quote, setQuote] = useState<Quote>(null);
@@ -231,14 +253,20 @@ function StockDetail({ symbol }: { symbol: string }) {
       setNews(n);
       setCal(c);
       setIndicators(ind);
+    } catch (err: any) {
       setError(err?.message || "Laden fehlgeschlagen");
+    } finally {
       setLoading(false);
+    }
+  };
   useEffect(() => { load(); }, [symbol]);
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
       await refreshStock(symbol);
       await load();
+    } finally { setRefreshing(false); }
+  };
   return (
     <div className="stock-detail">
       <div className="detail-header">
@@ -263,7 +291,7 @@ function StockDetail({ symbol }: { symbol: string }) {
             {quote.changePercent != null ? "(" + pct(quote.changePercent) + ")" : ""}
           </div>
           <div className="meta">
-            <span>Börse: {quote.exchangeName || "-"}</span>
+            <span>BÃ¶rse: {quote.exchangeName || "-"}</span>
             <span>Status: {quote.marketState || "-"}</span>
             <span>Stand: {dateShort(quote.timestamp)}</span>
           </div>
@@ -272,7 +300,7 @@ function StockDetail({ symbol }: { symbol: string }) {
       <div className="tabs">
         {(["overview", "fundamentals", "news", "calendar", "indicators"] as const).map(t => (
           <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
-            {t === "overview" ? "Übersicht" : t === "fundamentals" ? "Fundamentaldaten" : t === "news" ? "Nachrichten" : t === "calendar" ? "Termine" : "Indikatoren"}
+            {t === "overview" ? "Ãœbersicht" : t === "fundamentals" ? "Fundamentaldaten" : t === "news" ? "Nachrichten" : t === "calendar" ? "Termine" : "Indikatoren"}
           </button>
         ))}
       </div>
@@ -333,6 +361,7 @@ function StockDetail({ symbol }: { symbol: string }) {
       )}
     </div>
   );
+}
 function NewsCard({ item }: { item: NewsItem }) {
   return (
     <a className="news-card" href={item.link} target="_blank" rel="noreferrer">
@@ -347,6 +376,7 @@ function NewsCard({ item }: { item: NewsItem }) {
       </div>
     </a>
   );
+}
 function News({ news }: { news: NewsData }) {
   if (!news) return <div>Loading news...</div>;
   const { company, geopolitics } = news;
@@ -370,6 +400,7 @@ function News({ news }: { news: NewsData }) {
       )}
     </div>
   );
+}
 function CalendarEventCard({ event }: { event: any }) {
   const date = event.date ? new Date(event.date).toLocaleString() : "-";
   return (
@@ -378,18 +409,19 @@ function CalendarEventCard({ event }: { event: any }) {
       <div className="event-date">{date}</div>
       {event.earningsAverage != null && (
         <div className="event-extra">
-          EPS-Schätzung: {formatNumber(event.earningsAverage)} (low {formatNumber(event.earningsLow)} / high {formatNumber(event.earningsHigh)})
+          EPS-SchÃ¤tzung: {formatNumber(event.earningsAverage)} (low {formatNumber(event.earningsLow)} / high {formatNumber(event.earningsHigh)})
         </div>
       )}
       {event.revenueAverage != null && (
         <div className="event-extra">
-          Umsatz-Schätzung: {formatLarge(event.revenueAverage)}
+          Umsatz-SchÃ¤tzung: {formatLarge(event.revenueAverage)}
         </div>
       )}
       {event.description && <div className="event-extra">{event.description}</div>}
-      {event.isEstimate && <div className="event-tag">Schätzung</div>}
+      {event.isEstimate && <div className="event-tag">SchÃ¤tzung</div>}
     </div>
   );
+}
 function Calendar({ cal }: { cal: CalendarData }) {
   if (!cal) return <div>Loading calendar...</div>;
   return (
@@ -403,8 +435,10 @@ function Calendar({ cal }: { cal: CalendarData }) {
       )}
     </div>
   );
+}
 function CalendarEventKey({ event }: { event: any }) {
   return <CalendarEventCard event={event} />;
+}
 function formatLarge(num: number | null | undefined): string {
   if (num == null || !Number.isFinite(num)) return "-";
   const abs = Math.abs(num);
@@ -413,7 +447,10 @@ function formatLarge(num: number | null | undefined): string {
   if (abs >= 1e6) return (num / 1e6).toFixed(2) + "M";
   if (abs >= 1e3) return (num / 1e3).toFixed(2) + "K";
   return String(num);
+}
 function formatNumber(num: number | null | undefined): string {
   if (num == null || !Number.isFinite(num)) return "-";
   return num.toString();
+}
 export default App;
+
