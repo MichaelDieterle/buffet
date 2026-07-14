@@ -12,6 +12,7 @@ import api, {
 } from "./api";
 import { Fundamentals } from "./components/Fundamentals";
 type Stock = { id: number; symbol: string; name: string; sector?: string; industry?: string };
+type SearchResult = { symbol: string; name: string; exchange: string };
 type Quote = {
   price: number | null; change: number | null; changePercent: number | null;
   dayHigh: number | null; dayLow: number | null; yearHigh: number | null; yearLow: number | null;
@@ -93,7 +94,7 @@ function big(n: number | null | undefined) {
   if (abs >= 1e12) return (n / 1e12).toFixed(2) + "T";
   if (abs >= 1e9) return (n / 1e9).toFixed(2) + "B";
   if (abs >= 1e6) return (n / 1e6).toFixed(2) + "M";
-  if (abs >= 1e3) return (num / 1e3).toFixed(2) + "K";
+  if (abs >= 1e3) return (n / 1e3).toFixed(2) + "K";
   return String(n);
 }
 function dateShort(s: string | null | undefined) {
@@ -297,7 +298,7 @@ function StockDetail({ symbol }: { symbol: string }) {
         </div>
       )}
       <div className="tabs">
-        {["overview", "fundamentals", "news", "calendar", "indicators"].map(t => (
+        {(["overview", "fundamentals", "news", "calendar", "indicators"] as const).map(t => (
           <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
             {t === "overview" ? "Übersicht" : t === "fundamentals" ? "Fundamentaldaten" : t === "news" ? "Nachrichten" : t === "calendar" ? "Termine" : "Indikatoren"}
           </button>
@@ -363,9 +364,6 @@ function StockDetail({ symbol }: { symbol: string }) {
 }
 function kv(k: string, v: any) {
   return <div className="kv"><span>{k}</span><strong>{v}</strong></div>;
-}
-function Card({ title, children, wide }: { title: string; children: any; wide?: boolean }) {
-  return <div className="card"><h4>{title}</h4>{children}</div>;
 }
 function NewsCard({ item }: { item: NewsItem }) {
   return (
@@ -444,26 +442,6 @@ function Calendar({ cal }: { cal: CalendarData }) {
 function CalendarEventKey({ event }: { event: any }) {
   return <CalendarEventCard event={event} />;
 }
-function IndicatorCard({ ind }: { ind: IndicatorData }) {
-  return (
-    <div className="grid">
-      <div className="card">
-        <h4>Durchschnittswerte</h4>
-        <div className="kv"><span>SMA 20</span><strong>fmt(ind.sma_20)</strong></div>
-        <div className="kv"><span>SMA 50</span><strong>fmt(ind.sma_50)</strong></div>
-        <div className="kv"><span>EMA 12</span><strong>fmt(ind.ema_12)</strong></div>
-        <div className="kv"><span>EMA 26</span><strong>fmt(ind.ema_26)</strong></div>
-      </div>
-      <div className="card">
-        <h4>Oszillatoren</h4>
-        <div className="kv"><span>RSI</span><strong>fmt(ind.rsi)</strong></div>
-        <div className="kv"><span>MACD</span><strong>fmt(ind.macd)</strong></div>
-        <div className="kv"><span>MACD Signal</span><strong>fmt(ind.macd_signal)</strong></div>
-        <div className="kv"><span>MACD Hist</span><strong>fmt(ind.macd_hist)</strong></div>
-      </div>
-    </div>
-  );
-}
 function formatLarge(num: number | null | undefined): string {
   if (num == null || !Number.isFinite(num)) return "-";
   const abs = Math.abs(num);
@@ -476,9 +454,5 @@ function formatLarge(num: number | null | undefined): string {
 function formatNumber(num: number | null | undefined): string {
   if (num == null || !Number.isFinite(num)) return "-";
   return num.toString();
-}
-function formatPercent(num: number | null | undefined): string {
-  if (num == null || !Number.isFinite(num)) return "-";
-  return (num * 100).toFixed(2) + "%";
 }
 export default App;

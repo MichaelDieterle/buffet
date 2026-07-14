@@ -23,8 +23,8 @@ export const Fundamentals: React.FC<FundamentalsProps> = ({ fund }) => {
       <div className="card">
         <h4>Dividende</h4>
         <div className="kv"><span>Rate</span><strong>{fund.dividendRate?.toFixed(4) ?? '-'}</strong></div>
-        <div className="kv"><span>Yield</span><strong>{(fund.dividendYield ?? 0) * 100?.toFixed(2) ?? '-'}%</strong></div>
-        <div className="kv"><span>Payout Ratio</span><strong>{(fund.payoutRatio ?? 0) * 100?.toFixed(2) ?? '-'}%</strong></div>
+        <div className="kv"><span>Yield</span><strong>{(fund.dividendYield != null ? (fund.dividendYield * 100).toFixed(2) : '-')}%</strong></div>
+        <div className="kv"><span>Payout Ratio</span><strong>{(fund.payoutRatio != null ? (fund.payoutRatio * 100).toFixed(2) : '-')}%</strong></div>
         <div className="kv"><span>Ex-Dividend</span><strong>{fund.exDividendDateFromCalendar ?? '-'}</strong></div>
         <div className="kv"><span>Zahldatum</span><strong>{fund.dividendDateFromCalendar ?? '-'}</strong></div>
       </div>
@@ -66,22 +66,22 @@ export const Fundamentals: React.FC<FundamentalsProps> = ({ fund }) => {
         <h4>Finanzkennzahlen</h4>
         <div className="kv"><span>Umsatzwachstum</span><strong>{fund.revenueGrowth?.toFixed(2) ?? "-"}</strong></div>
         <div className="kv"><span>Gewinnwachstum</span><strong>{fund.earningsGrowth?.toFixed(2) ?? "-"}</strong></div>
-        <div className="kv"><span>EBIT-Marge</span><strong>{(fund.ebitMargin ?? 0) * 100?.toFixed(2) ?? "-"}</strong></div>
-        <div className="kv"><span>Gewinnmarge</span><strong>{(fund.profitMargin ?? 0) * 100?.toFixed(2) ?? "-"}</strong></div>
+        <div className="kv"><span>EBIT-Marge</span><strong>{(fund.ebitMargin != null ? (fund.ebitMargin * 100).toFixed(2) : "-")}%</strong></div>
+        <div className="kv"><span>Gewinnmarge</span><strong>{(fund.profitMargin != null ? (fund.profitMargin * 100).toFixed(2) : "-")}%</strong></div>
         <div className="kv"><span>Verschuldungsgrad</span><strong>{fund.debtToEquity?.toFixed(2) ?? "-"}</strong></div>
-        <div className="kv"><span>Liquiditätsratio</span><strong>{fund.currentRatio?.toFixed(2) ?? "-"}</strong></div>
-        <div className="kv"><span>ROE</span><strong>{(fund.roe ?? 0) * 100?.toFixed(2) ?? "-"}</strong></div>
-        <div className="kv"><span>ROI</span><strong>{(fund.roi ?? 0) * 100?.toFixed(2) ?? "-"}</strong></div>
+        <div className="kv"><span>Liquiditï¿½tsratio</span><strong>{fund.currentRatio?.toFixed(2) ?? "-"}</strong></div>
+        <div className="kv"><span>ROE</span><strong>{(fund.roe != null ? (fund.roe * 100).toFixed(2) : "-")}%</strong></div>
+        <div className="kv"><span>ROI</span><strong>{(fund.roi != null ? (fund.roi * 100).toFixed(2) : "-")}%</strong></div>
       </div>
 
       {fund.businessSummary && (
         <div className="card wide">
-          <h4>Über das Unternehmen</h4>
+          <h4>ï¿½ber das Unternehmen</h4>
           <p className="summary">{fund.businessSummary}</p>
           <div className="muted">
             {fund.website && <a href={fund.website} target="_blank" rel="noreferrer">Website</a>}{" "}
-            {fund.country && `· ${fund.country} ${fund.city ? `(${fund.city})` : ''}`}{" "}
-            {fund.employees && `· ${fund.employees.toLocaleString()} Mitarbeiter`}
+            {fund.country && `ï¿½ ${fund.country} ${fund.city ? `(${fund.city})` : ''}`}{" "}
+            {fund.employees && `ï¿½ ${fund.employees.toLocaleString()} Mitarbeiter`}
           </div>
         </div>
       )}
