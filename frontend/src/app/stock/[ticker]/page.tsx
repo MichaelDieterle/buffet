@@ -19,17 +19,18 @@ export default async function StockPage({
   const { ticker } = params;
 
   // Fetch data in parallel
-  const [quote, metrics, history, competitors] = await Promise.allSettled([
+  const [quoteResult, metricsResult, historyResult, competitorsResult] = await Promise.allSettled([
     getQuote(ticker),
     getMetrics(ticker),
     getHistory(ticker),
     getCompetitors(ticker),
   ]);
 
-  // If any essential data fails, show placeholder (mock data already handled in api)
-  if (quote.status !== "fulfilled" || metrics.status !== "fulfilled" || history.status !== "fulfilled" || competitors.status !== "fulfilled") {
-    // For demo, we still show UI; API fallback already in lib
-  }
+  // Extract values or use undefined/null for rejected promises
+  const quote = quoteResult.status === "fulfilled" ? quoteResult.value : undefined;
+  const metrics = metricsResult.status === "fulfilled" ? metricsResult.value : null;
+  const history = historyResult.status === "fulfilled" ? historyResult.value : [];
+  const competitors = competitorsResult.status === "fulfilled" ? competitorsResult.value : [];
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 p-6">
@@ -43,13 +44,13 @@ export default async function StockPage({
       <div className="grid gap-8 md:grid-cols-[2fr_1fr]">
         {/* Left column: Chart and Metrics */}
         <div className="space-y-8">
-          <StockChart data={history.status === "fulfilled" ? history.value : []} />
-          <StockMetrics metrics={metrics.status === "fulfilled" ? metrics.value : null} />
+          <StockChart data={history} />
+          <StockMetrics metrics={metrics} />
         </div>
 
         {/* Right column: Competitors */}
         <div>
-          <CompetitorTable competitors={competitors.status === "fulfilled" ? competitors.value : []} />
+          <CompetitorTable competitors={competitors} />
         </div>
       </div>
     </div>

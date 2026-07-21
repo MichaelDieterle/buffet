@@ -13,8 +13,9 @@ async function refreshOneStock(stock) {
   const symbol = stock.symbol;
   const result = { symbol, ok: false, steps: {} };
 
+  let quote = null;
   try {
-    const quote = await yahoo.fetchQuote(symbol);
+    quote = await yahoo.fetchQuote(symbol);
     result.steps.quote = !!quote;
     if (quote) {
       await Fundamental.create({
@@ -37,8 +38,9 @@ async function refreshOneStock(stock) {
     console.error(`[refresh] quote failed for ${symbol}:`, err.message);
   }
 
+  let fund = null;
   try {
-    const fund = await yahoo.fetchFundamentals(symbol);
+    fund = await yahoo.fetchFundamentals(symbol);
     result.steps.fundamentals = !!fund;
     if (fund) {
       await Fundamental.create({

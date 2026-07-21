@@ -47,6 +47,11 @@ const startServer = async () => {
     console.warn('Starting server without database connectivity');
   }
 
+  // Health check endpoint
+  app.get('/health', (req, res) => {
+    res.json({ status: 'ok' });
+  });
+
   // Serve static client assets in production
   if (process.env.NODE_ENV === 'production') {
     const clientDistPath = path.join(__dirname, '..', 'client', 'dist');
@@ -56,11 +61,6 @@ const startServer = async () => {
       res.sendFile(path.join(clientDistPath, 'index.html'));
     });
   }
-
-  // Root endpoint
-  app.get('/', (req, res) => {
-    res.json({ message: 'Stock Tracking API is running' });
-  });
 
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

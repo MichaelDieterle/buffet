@@ -1,4 +1,4 @@
-services:
+﻿services:
   - type: web
     name: buffet-backend
     env: node
@@ -7,8 +7,16 @@ services:
     startCommand: npm start
     envVars:
       - key: DATABASE_URL
-        sync: false
-      - key: REDIS_URL
-        sync: false
+        fromDatabase:
+          name: buffet-db
+          property: connectionString
+      - key: NODE_ENV
+        value: production
       - key: NPM_CONFIG_PRODUCTION
         value: "false"
+
+databases:
+  - name: buffet-db
+    plan: free
+    databaseName: buffet
+    user: buffet_user
