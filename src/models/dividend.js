@@ -7,7 +7,12 @@ module.exports = (sequelize, DataTypes) => {
     exDate: DataTypes.DATE,
     declarationDate: DataTypes.DATE,
     frequency: DataTypes.STRING,
-  }, { timestamps: true });
+  }, {
+    timestamps: true,
+    indexes: [
+      { unique: true, fields: ['stockId', 'exDate'] }
+    ],
+  });
 
   Dividend.associate = (models) => {
     Dividend.belongsTo(models.Stock, { foreignKey: 'stockId', as: 'stock' });
