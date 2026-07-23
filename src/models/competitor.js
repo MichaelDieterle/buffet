@@ -1,4 +1,4 @@
-﻿module.exports = (sequelize, DataTypes) => {
+module.exports = (sequelize, DataTypes) => {
   const Competitor = sequelize.define('Competitor', {
     relationType: { type: DataTypes.STRING, defaultValue: 'peer' },
   }, { timestamps: false });
