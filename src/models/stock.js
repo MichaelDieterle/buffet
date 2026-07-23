@@ -29,7 +29,7 @@
     Stock.hasMany(models.CalendarEvent, { foreignKey: 'stockId', as: 'calendarEvents' });
     Stock.hasMany(models.Fundamental, { foreignKey: 'stockId', as: 'fundamentals' });
     Stock.belongsToMany(models.Stock, { as: 'CompetedWith', through: models.Competitor, foreignKey: 'stockId', otherKey: 'competitorId' });
-    Stock.belongsToMany(models.Comparison, { through: 'ComparisonItem', foreignKey: 'stockId' });
+    Stock.belongsToMany(models.Comparison, { through: models.ComparisonItem, foreignKey: 'stockId' });
   };
 
   return Stock;
