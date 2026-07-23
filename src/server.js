@@ -17,28 +17,40 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors());
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['http://localhost:3000', 'http://localhost:5173'];
+
+app.use(cors({ origin: allowedOrigins }));
 app.use(helmet());
-app.use(morgan('dev'));
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // API routes
 app.use('/api/stocks', stockRoutes);
-app.use('/api/stocks', competitorRoutes); // mounts /:symbol/competitors under /api/stocks
+app.use('/api/stocks', competitorRoutes);
 app.use('/api/comparisons', comparisonRoutes);
-app.use('/api/stocks', exportRoutes); // mounts /:symbol/export.csv under /api/stocks
+app.use('/api/stocks', exportRoutes);
 
 // Test DB connection and start server
 const startServer = async () => {
+  // Health check endpoint (before static middleware)
+  app.get('/health', (req, res) => {
+    res.json({ status: 'ok' });
+  });
+
   try {
     await sequelize.authenticate();
     console.log('Database connected...');
-    // Optionally sync models (use alter in production)
-    await sequelize.sync({ alter: true });
+    // Use alter only in development; in production rely on migrations
+    if (process.env.NODE_ENV !== 'production') {
+      await sequelize.sync({ alter: true });
+    } else {
+      await sequelize.sync();
+    }
     console.log('Database synced.');
 
-    // Start background refresh job if not disabled
     if (process.env.DISABLE_REFRESH_JOB !== 'true') {
       refreshJob.start();
     }
@@ -47,16 +59,10 @@ const startServer = async () => {
     console.warn('Starting server without database connectivity');
   }
 
-  // Health check endpoint
-  app.get('/health', (req, res) => {
-    res.json({ status: 'ok' });
-  });
-
   // Serve static client assets in production
   if (process.env.NODE_ENV === 'production') {
     const clientDistPath = path.join(__dirname, '..', 'client', 'dist');
     app.use(express.static(clientDistPath));
-    // All unknown routes should serve index.html (client-side routing)
     app.get('*', (req, res) => {
       res.sendFile(path.join(clientDistPath, 'index.html'));
     });
@@ -70,4 +76,3 @@ const startServer = async () => {
 startServer();
 
 module.exports = app;
-
