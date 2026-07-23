@@ -43,6 +43,14 @@ function safeNumber(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+function toISO(v) {
+  if (v == null) return null;
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : v.toISOString();
+  const ms = typeof v === 'number' && v < 1e12 ? v * 1000 : Number(v);
+  const d = new Date(ms);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 async function fetchQuote(symbol) {
   const key = `quote:${symbol}`;
   const cached = cache.get(key);
@@ -77,7 +85,7 @@ async function fetchQuote(symbol) {
       quoteType: q.quoteType || null,
       shortName: q.shortName || null,
       longName: q.longName || null,
-      timestamp: q.regularMarketTime ? new Date(q.regularMarketTime * 1000).toISOString() : new Date().toISOString(),
+      timestamp: q.regularMarketTime ? toISO(q.regularMarketTime) : new Date().toISOString(),
     };
     cache.set(key, data, 30);
     return data;
@@ -123,7 +131,7 @@ async function fetchFundamentals(symbol) {
       dividendYield: safeNumber(s.dividendYield),
       trailingAnnualDividendRate: safeNumber(s.trailingAnnualDividendRate),
       trailingAnnualDividendYield: safeNumber(s.trailingAnnualDividendYield),
-      exDividendDate: s.exDividendDate ? new Date(s.exDividendDate * 1000).toISOString() : null,
+      exDividendDate: s.exDividendDate ? toISO(s.exDividendDate) : null,
       payoutRatio: safeNumber(s.payoutRatio),
       marketCap: safeNumber(s.marketCap) ?? safeNumber(p.marketCap),
       beta: safeNumber(ks.beta),
@@ -168,13 +176,13 @@ async function fetchFundamentals(symbol) {
       businessSummary: ap.longBusinessSummary || null,
       fiscalYearEnd: ap.fiscalYearEnd || null,
       nextEarningsDate: ce?.earnings?.earningsDate?.[0]
-        ? new Date(ce.earnings.earningsDate[0] * 1000).toISOString()
+        ? toISO(ce.earnings.earningsDate[0])
         : null,
       earningsDateLow: ce?.earnings?.earningsDate?.[0]
-        ? new Date(ce.earnings.earningsDate[0] * 1000).toISOString()
+        ? toISO(ce.earnings.earningsDate[0])
         : null,
       earningsDateHigh: ce?.earnings?.earningsDate?.[1]
-        ? new Date(ce.earnings.earningsDate[1] * 1000).toISOString()
+        ? toISO(ce.earnings.earningsDate[1])
         : null,
       isEarningsDateEstimate: ce?.earnings?.isEarningsDateEstimate ?? null,
       earningsAverage: safeNumber(ce?.earnings?.earningsAverage),
@@ -182,10 +190,10 @@ async function fetchFundamentals(symbol) {
       earningsHigh: safeNumber(ce?.earnings?.earningsHigh),
       revenueAverage: safeNumber(ce?.earnings?.revenueAverage),
       exDividendDateFromCalendar: ce?.exDividendDate?.date
-        ? new Date(ce.exDividendDate.date * 1000).toISOString()
+        ? toISO(ce.exDividendDate.date)
         : null,
       dividendDateFromCalendar: ce?.dividendDate?.date
-        ? new Date(ce.dividendDate.date * 1000).toISOString()
+        ? toISO(ce.dividendDate.date)
         : null,
       lastUpdated: new Date().toISOString(),
     };
@@ -209,7 +217,7 @@ async function fetchNews(symbol) {
       publisher: n.publisher,
       link: n.link,
       publishedAt: n.providerPublishTime
-        ? new Date(n.providerPublishTime * 1000).toISOString()
+        ? toISO(n.providerPublishTime)
         : null,
       type: classifyArticle(n),
       relatedTickers: n.relatedTickers || [],
@@ -244,9 +252,9 @@ async function fetchCalendar(symbol) {
       events.push({
         type: 'earnings',
         symbol,
-        date: e.earningsDate?.[0] ? new Date(e.earningsDate[0] * 1000).toISOString() : null,
-        dateLow: e.earningsDate?.[0] ? new Date(e.earningsDate[0] * 1000).toISOString() : null,
-        dateHigh: e.earningsDate?.[1] ? new Date(e.earningsDate[1] * 1000).toISOString() : null,
+        date: e.earningsDate?.[0] ? toISO(e.earningsDate[0]) : null,
+        dateLow: e.earningsDate?.[0] ? toISO(e.earningsDate[0]) : null,
+        dateHigh: e.earningsDate?.[1] ? toISO(e.earningsDate[1]) : null,
         isEstimate: e.isEarningsDateEstimate ?? null,
         earningsAverage: safeNumber(e.earningsAverage),
         earningsLow: safeNumber(e.earningsLow),
@@ -260,14 +268,14 @@ async function fetchCalendar(symbol) {
       events.push({
         type: 'ex-dividend',
         symbol,
-        date: ce.exDividendDate.date ? new Date(ce.exDividendDate.date * 1000).toISOString() : null,
+        date: ce.exDividendDate.date ? toISO(ce.exDividendDate.date) : null,
       });
     }
     if (ce.dividendDate) {
       events.push({
         type: 'dividend-payment',
         symbol,
-        date: ce.dividendDate.date ? new Date(ce.dividendDate.date * 1000).toISOString() : null,
+        date: ce.dividendDate.date ? toISO(ce.dividendDate.date) : null,
       });
     }
     if (Array.isArray(ce?.otherEvents)) {
@@ -275,7 +283,7 @@ async function fetchCalendar(symbol) {
         events.push({
           type: 'other',
           symbol,
-          date: o.date ? new Date(o.date * 1000).toISOString() : null,
+          date: o.date ? toISO(o.date) : null,
           description: o.description || null,
         });
       }
