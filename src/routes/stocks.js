@@ -1,10 +1,26 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { Stock, PriceHistory } = require('../models');
 const { Sequelize } = require('sequelize');
 const yahoo = require('../services/yahooService');
 const refresh = require('../services/refreshJob');
 const indicator = require('../services/indicator');
+
+// Rate limiters
+const yahooLimiter = rateLimit({
+  windowMs: 60 * 1000,  // 1 minute
+  max: 60,              // max 60 requests per IP per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
+const searchLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { error: 'Too many search requests, please try again later.' },
+});
 
 // Admin key middleware
 function requireAdminKey(req, res, next) {
@@ -49,7 +65,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET search via yahoo
-router.get('/search/:query', async (req, res) => {
+router.get('/search/:query', searchLimiter, async (req, res) => {
   try {
     const results = await yahoo.searchSymbol(req.params.query);
     res.json(results);
@@ -123,7 +139,7 @@ router.get('/:symbol/history', async (req, res) => {
 });
 
 // GET live quote
-router.get('/:symbol/quote', async (req, res) => {
+router.get('/:symbol/quote', yahooLimiter, async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await yahoo.fetchQuote(symbol);
@@ -136,7 +152,7 @@ router.get('/:symbol/quote', async (req, res) => {
 });
 
 // GET fundamentals
-router.get('/:symbol/fundamentals', async (req, res) => {
+router.get('/:symbol/fundamentals', yahooLimiter, async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await yahoo.fetchFundamentals(symbol);
@@ -149,7 +165,7 @@ router.get('/:symbol/fundamentals', async (req, res) => {
 });
 
 // GET news
-router.get('/:symbol/news', async (req, res) => {
+router.get('/:symbol/news', yahooLimiter, async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await yahoo.fetchNews(symbol);
@@ -161,7 +177,7 @@ router.get('/:symbol/news', async (req, res) => {
 });
 
 // GET calendar events
-router.get('/:symbol/calendar', async (req, res) => {
+router.get('/:symbol/calendar', yahooLimiter, async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await yahoo.fetchCalendar(symbol);
@@ -173,7 +189,7 @@ router.get('/:symbol/calendar', async (req, res) => {
 });
 
 // GET yahoo history (no DB write)
-router.get('/:symbol/yahoo-history', async (req, res) => {
+router.get('/:symbol/yahoo-history', yahooLimiter, async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const { range = '6mo', interval = '1d' } = req.query;
@@ -186,7 +202,7 @@ router.get('/:symbol/yahoo-history', async (req, res) => {
 });
 
 // GET technical indicators
-router.get('/:symbol/indicators', async (req, res) => {
+router.get('/:symbol/indicators', yahooLimiter, async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const stock = await Stock.findOne({ where: { symbol } });
