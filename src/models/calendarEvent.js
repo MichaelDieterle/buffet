@@ -3,7 +3,12 @@ module.exports = (sequelize, DataTypes) => {
     type: { type: DataTypes.STRING, allowNull: false },
     eventDate: DataTypes.DATE,
     description: DataTypes.TEXT,
-  }, { timestamps: true });
+  }, {
+    timestamps: true,
+    indexes: [
+      { unique: true, fields: ['stockId', 'type', 'eventDate'] }
+    ],
+  });
 
   CalendarEvent.associate = (models) => {
     CalendarEvent.belongsTo(models.Stock, { foreignKey: 'stockId', as: 'stock' });
