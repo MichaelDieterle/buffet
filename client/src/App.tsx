@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import api, {
   fetchQuote,
   fetchFundamentals,
@@ -435,9 +435,6 @@ function Calendar({ cal }: { cal: CalendarData }) {
       )}
     </div>
   );
-}
-function CalendarEventKey({ event }: { event: any }) {
-  return <CalendarEventCard event={event} />;
 }
 function formatLarge(num: number | null | undefined): string {
   if (num == null || !Number.isFinite(num)) return "-";
