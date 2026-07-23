@@ -7,3 +7,6 @@ client/dist/
 *.bak
 *.fixed
 smoke-test.js
+*.bak
+*.fixed
+smoke-test.js
