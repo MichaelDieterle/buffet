@@ -13,7 +13,12 @@ module.exports = (sequelize, DataTypes) => {
     revenueHigh: DataTypes.BIGINT,
     revenueActual: DataTypes.BIGINT,
     quarter: DataTypes.STRING,
-  }, { timestamps: true });
+  }, {
+    timestamps: true,
+    indexes: [
+      { unique: true, fields: ['stockId', 'reportDate'] }
+    ],
+  });
 
   Earning.associate = (models) => {
     Earning.belongsTo(models.Stock, { foreignKey: 'stockId', as: 'stock' });
