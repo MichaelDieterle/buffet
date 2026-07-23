@@ -1,24 +1,48 @@
-﻿import type { Metadata } from "next";
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import StockCard from "@/components/stock/StockCard";
-import Navbar from "@/components/layout/Navbar";
+import { getQuote } from "@/lib/api";
 
-export const metadata: Metadata = {
-  title: "Buffet - Dashboard",
-  description: "Stock Market Review Dashboard",
-};
+interface StockQuote {
+  ticker: string;
+  price: number;
+  change: number;
+}
+
+const TICKERS = ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "GOOGL"];
 
 export default function Home() {
-  const tickers = ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "GOOGL"];
+  const [quotes, setQuotes] = useState<Record<string, StockQuote>>({});
+
+  useEffect(() => {
+    TICKERS.forEach(async (ticker) => {
+      try {
+        const data = await getQuote(ticker);
+        if (data) {
+          setQuotes(prev => ({
+            ...prev,
+            [ticker]: { ticker, price: data.price ?? 0, change: data.changePercent ?? 0 },
+          }));
+        }
+      } catch {
+        // keep default 0 values on error
+      }
+    });
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 p-6">
-      <h1 className="text-3xl font-bold text-center mb-8">Buffet - Stock Market Review</h1>
-      <Navbar />
+      <h1 className="text-3xl font-bold text-center mb-8">Buffet – Stock Market Review</h1>
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {tickers.map((ticker) => (
+        {TICKERS.map((ticker) => (
           <Link key={ticker} href={`/stock/${ticker}`} className="hover:opacity-90 transition-opacity">
-            <StockCard ticker={ticker} />
+            <StockCard
+              ticker={ticker}
+              price={quotes[ticker]?.price ?? 0}
+              change={quotes[ticker]?.change ?? 0}
+            />
           </Link>
         ))}
       </div>
