@@ -30,7 +30,11 @@ router.post('/', async (req, res) => {
         });
       }
     }
-    res.status(201).json(comparison);
+    // Return the comparison with its items included
+    const full = await Comparison.findByPk(comparison.id, {
+      include: [{ model: Stock, as: 'stocks', through: { attributes: ['weight', 'notes'] } }],
+    });
+    res.status(201).json(full);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
