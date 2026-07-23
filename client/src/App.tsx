@@ -316,18 +316,18 @@ function StockDetail({ symbol }: { symbol: string }) {
           <div className="card">
             <h4>52-Wochen</h4>
             <div className="kv"><span>Hoch</span><strong>{fmt(quote.yearHigh)}</strong></div>
-            <div className="kv"><span>Tief</span><strong>fmt(quote.yearLow)</strong></div>
+            <div className="kv"><span>Tief</span><strong>{fmt(quote.yearLow)}</strong></div>
           </div>
           <div className="card">
             <h4>Marktkapitalisierung</h4>
-            <div className="kv"><span>Market Cap</span><strong>big(quote.marketCap)</strong></div>
+            <div className="kv"><span>Market Cap</span><strong>{big(quote.marketCap)}</strong></div>
           </div>
           {fund && (
             <div className="card">
               <h4>Bewertung</h4>
-              <div className="kv"><span>KGV (PE)</span><strong>fmt(fund.peRatio)</strong></div>
-              <div className="kv"><span>Forward PE</span><strong>fmt(fund.forwardPe)</strong></div>
-              <div className="kv"><span>PEG</span><strong>fmt(fund.pegRatio)</strong></div>
+              <div className="kv"><span>KGV (PE)</span><strong>{fmt(fund.peRatio)}</strong></div>
+              <div className="kv"><span>Forward PE</span><strong>{fmt(fund.forwardPe)}</strong></div>
+              <div className="kv"><span>PEG</span><strong>{fmt(fund.pegRatio)}</strong></div>
             </div>
           )}
         </div>
@@ -345,17 +345,17 @@ function StockDetail({ symbol }: { symbol: string }) {
         <div className="grid">
           <div className="card">
             <h4>Durchschnittswerte</h4>
-            <div className="kv"><span>SMA 20</span><strong>fmt(indicators.sma_20)</strong></div>
-            <div className="kv"><span>SMA 50</span><strong>fmt(indicators.sma_50)</strong></div>
-            <div className="kv"><span>EMA 12</span><strong>fmt(indicators.ema_12)</strong></div>
-            <div className="kv"><span>EMA 26</span><strong>fmt(indicators.ema_26)</strong></div>
+            <div className="kv"><span>SMA 20</span><strong>{fmt(indicators.sma_20)}</strong></div>
+            <div className="kv"><span>SMA 50</span><strong>{fmt(indicators.sma_50)}</strong></div>
+            <div className="kv"><span>EMA 12</span><strong>{fmt(indicators.ema_12)}</strong></div>
+            <div className="kv"><span>EMA 26</span><strong>{fmt(indicators.ema_26)}</strong></div>
           </div>
           <div className="card">
             <h4>Oszillatoren</h4>
-            <div className="kv"><span>RSI</span><strong>fmt(indicators.rsi)</strong></div>
-            <div className="kv"><span>MACD</span><strong>fmt(indicators.macd)</strong></div>
-            <div className="kv"><span>MACD Signal</span><strong>fmt(indicators.macd_signal)</strong></div>
-            <div className="kv"><span>MACD Hist</span><strong>fmt(indicators.macd_hist)</strong></div>
+            <div className="kv"><span>RSI</span><strong>{fmt(indicators.rsi)}</strong></div>
+            <div className="kv"><span>MACD</span><strong>{fmt(indicators.macd)}</strong></div>
+            <div className="kv"><span>MACD Signal</span><strong>{fmt(indicators.macd_signal)}</strong></div>
+            <div className="kv"><span>MACD Hist</span><strong>{fmt(indicators.macd_hist)}</strong></div>
           </div>
         </div>
       )}
@@ -429,7 +429,7 @@ function Calendar({ cal }: { cal: CalendarData }) {
       {cal.events.length === 0 ? <div className="muted">Keine Termine</div> : (
         <>
           {cal.events.map((event: any, index: number) => (
-            <CalendarEventKey key={index} event={event} />
+            <CalendarEventCard key={index} event={event} />
           ))}
         </>
       )}
