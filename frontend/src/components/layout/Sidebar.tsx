@@ -1,17 +1,19 @@
+import Link from "next/link";
+
 export default function Sidebar() {
   return (
     <aside className="hidden md:block">
       <div className="space-y-4 p-4">
-        <nav className="space-y-2">
-          <a href="#" className="text-gray-400 hover:text-gray-200">
+        <nav className="space-y-2 flex flex-col">
+          <Link href="/" className="text-gray-400 hover:text-gray-200 transition-colors">
             Overview
-          </a>
-          <a href="#" className="text-gray-400 hover:text-gray-200">
+          </Link>
+          <Link href="/watchlist" className="text-gray-400 hover:text-gray-200 transition-colors">
             Watchlist
-          </a>
-          <a href="#" className="text-gray-400 hover:text-gray-200">
+          </Link>
+          <Link href="/screener" className="text-gray-400 hover:text-gray-200 transition-colors">
             Screener
-          </a>
+          </Link>
         </nav>
       </div>
     </aside>
