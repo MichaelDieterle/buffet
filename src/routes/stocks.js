@@ -1,10 +1,49 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { Stock, PriceHistory } = require('../models');
 const { Sequelize } = require('sequelize');
 const yahoo = require('../services/yahooService');
 const refresh = require('../services/refreshJob');
 const indicator = require('../services/indicator');
+
+// Rate limiters
+const yahooLimiter = rateLimit({
+  windowMs: 60 * 1000,  // 1 minute
+  max: 60,              // max 60 requests per IP per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
+const searchLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { error: 'Too many search requests, please try again later.' },
+});
+
+// Admin key middleware
+function requireAdminKey(req, res, next) {
+  const key = req.headers['x-admin-key'];
+  if (process.env.ADMIN_KEY && key !== process.env.ADMIN_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
+
+// ── ADMIN ROUTES (must be before /:symbol to avoid shadowing) ─────────────
+// GET refresh job status
+router.get('/_admin/refresh-status', requireAdminKey, async (req, res) => {
+  res.json(refresh.getStatus());
+});
+
+// POST trigger a global refresh
+router.post('/_admin/refresh', requireAdminKey, async (req, res) => {
+  const result = await refresh.refreshAll();
+  res.json(result);
+});
+
+// ── PUBLIC ROUTES ──────────────────────────────────────────────────────────
 
 // GET all stocks with optional filters
 router.get('/', async (req, res) => {
@@ -25,8 +64,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET search via yahoo (proxies search before stock exists locally)
-router.get('/search/:query', async (req, res) => {
+// GET search via yahoo
+router.get('/search/:query', searchLimiter, async (req, res) => {
   try {
     const results = await yahoo.searchSymbol(req.params.query);
     res.json(results);
@@ -36,7 +75,7 @@ router.get('/search/:query', async (req, res) => {
   }
 });
 
-// POST create a new stock (and optionally fetch initial data)
+// POST create a new stock
 router.post('/', async (req, res) => {
   try {
     const { symbol, name, sector, industry, currency, marketCap, fetchOnCreate = true } = req.body;
@@ -77,10 +116,15 @@ router.get('/:symbol/history', async (req, res) => {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });
 
-    const { start, end, limit = 100 } = req.query;
+    const { start, end, limit = 100, days } = req.query;
     const where = { stockId: stock.id };
     if (start) where.date = { ...(where.date || {}), [Sequelize.Op.gte]: new Date(start) };
-    if (end) where.date = { ...(where.date || {}), [Sequelize.Op.lte]: new Date(end) };
+    if (end)   where.date = { ...(where.date || {}), [Sequelize.Op.lte]: new Date(end) };
+    if (days && !start) {
+      const since = new Date();
+      since.setDate(since.getDate() - parseInt(days));
+      where.date = { [Sequelize.Op.gte]: since };
+    }
 
     const history = await PriceHistory.findAll({
       where,
@@ -94,8 +138,8 @@ router.get('/:symbol/history', async (req, res) => {
   }
 });
 
-// GET live quote for a stock (Yahoo)
-router.get('/:symbol/quote', async (req, res) => {
+// GET live quote
+router.get('/:symbol/quote', yahooLimiter, async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await yahoo.fetchQuote(symbol);
@@ -107,8 +151,8 @@ router.get('/:symbol/quote', async (req, res) => {
   }
 });
 
-// GET fundamentals (P/E, dividend, etc.)
-router.get('/:symbol/fundamentals', async (req, res) => {
+// GET fundamentals
+router.get('/:symbol/fundamentals', yahooLimiter, async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await yahoo.fetchFundamentals(symbol);
@@ -120,8 +164,8 @@ router.get('/:symbol/fundamentals', async (req, res) => {
   }
 });
 
-// GET news (company + geopolitics, classified)
-router.get('/:symbol/news', async (req, res) => {
+// GET news
+router.get('/:symbol/news', yahooLimiter, async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await yahoo.fetchNews(symbol);
@@ -132,8 +176,8 @@ router.get('/:symbol/news', async (req, res) => {
   }
 });
 
-// GET calendar events (earnings, dividends, etc.)
-router.get('/:symbol/calendar', async (req, res) => {
+// GET calendar events
+router.get('/:symbol/calendar', yahooLimiter, async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await yahoo.fetchCalendar(symbol);
@@ -144,8 +188,8 @@ router.get('/:symbol/calendar', async (req, res) => {
   }
 });
 
-// GET price history from Yahoo (no DB write)
-router.get('/:symbol/yahoo-history', async (req, res) => {
+// GET yahoo history (no DB write)
+router.get('/:symbol/yahoo-history', yahooLimiter, async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const { range = '6mo', interval = '1d' } = req.query;
@@ -157,18 +201,17 @@ router.get('/:symbol/yahoo-history', async (req, res) => {
   }
 });
 
-// GET technical indicators for a stock
-router.get('/:symbol/indicators', async (req, res) => {
+// GET technical indicators
+router.get('/:symbol/indicators', yahooLimiter, async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const stock = await Stock.findOne({ where: { symbol } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });
 
-    // Fetch recent price history (e.g., last 100 days) for indicator calculation
     const priceHistory = await PriceHistory.findAll({
       where: { stockId: stock.id },
       order: [['date', 'ASC']],
-      limit: 100,
+      limit: 200,
     });
 
     if (priceHistory.length === 0) {
@@ -179,7 +222,6 @@ router.get('/:symbol/indicators', async (req, res) => {
     const closes = plain.map(p => parseFloat(p.close));
     const ind = indicator.computeIndicators(closes);
 
-    // Build latest values (most recent) for each indicator
     const latest = {};
     const lastIdx = closes.length - 1;
     for (const key in ind) {
@@ -190,12 +232,7 @@ router.get('/:symbol/indicators', async (req, res) => {
       }
     }
 
-    res.json({
-      symbol,
-      indicators: latest,
-      // optionally include full series
-      // indicatorSeries: ind,
-    });
+    res.json({ symbol, indicators: latest });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -203,7 +240,7 @@ router.get('/:symbol/indicators', async (req, res) => {
 });
 
 // POST trigger a manual refresh for one stock
-router.post('/:symbol/refresh', async (req, res) => {
+router.post('/:symbol/refresh', requireAdminKey, async (req, res) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });
@@ -213,17 +250,6 @@ router.post('/:symbol/refresh', async (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
-});
-
-// GET refresh job status
-router.get('/_admin/refresh-status', async (req, res) => {
-  res.json(refresh.getStatus());
-});
-
-// POST trigger a global refresh
-router.post('/_admin/refresh', async (req, res) => {
-  const result = await refresh.refreshAll();
-  res.json(result);
 });
 
 module.exports = router;

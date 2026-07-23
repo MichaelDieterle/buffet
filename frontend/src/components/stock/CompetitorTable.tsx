@@ -50,9 +50,9 @@ export default function CompetitorTable({ competitors }: CompetitorTableProps) {
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-100">{comp.name}</td>
                   <td className="px-4 py-3 text-sm text-gray-100">${comp.price.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-sm text-sm">
+                  <td className="px-4 py-3 text-sm">
                     <span className={isPositive ? "text-green-400" : "text-red-400"}>
-                      {comp.change >= 0 ? "+" : ""}${comp.change.toFixed(2)}%
+                      {comp.change >= 0 ? "+" : ""}{comp.change.toFixed(2)}%
                     </span>
                   </td>
                 </tr>

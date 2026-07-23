@@ -1,4 +1,4 @@
-﻿services:
+services:
   - type: web
     name: buffet-backend
     env: node
@@ -14,6 +14,12 @@
         value: production
       - key: NPM_CONFIG_PRODUCTION
         value: "false"
+      - key: VITE_API_URL
+        value: "https://buffet-backend.onrender.com/api"
+      - key: ALLOWED_ORIGINS
+        value: "https://buffet-backend.onrender.com"
+      - key: ADMIN_KEY
+        generateValue: true
 
 databases:
   - name: buffet-db

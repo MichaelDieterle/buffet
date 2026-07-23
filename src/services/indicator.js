@@ -12,7 +12,7 @@ function computeIndicators(closes) {
   if (closes.length >= 20) {
     const sma20 = new SMA({ period: 20, values: closes });
     result.sma_20 = Array.from({ length: closes.length }, (_, i) =>
-      i < 19 ? null : sma20.result[i - 19] || null
+      i < 19 ? null : sma20.result[i - 19] ?? null
     );
   } else {
     result.sma_20 = Array(closes.length).fill(null);
@@ -20,7 +20,7 @@ function computeIndicators(closes) {
   if (closes.length >= 50) {
     const sma50 = new SMA({ period: 50, values: closes });
     result.sma_50 = Array.from({ length: closes.length }, (_, i) =>
-      i < 49 ? null : sma50.result[i - 49] || null
+      i < 49 ? null : sma50.result[i - 49] ?? null
     );
   } else {
     result.sma_50 = Array(closes.length).fill(null);
@@ -30,7 +30,7 @@ function computeIndicators(closes) {
   if (closes.length >= 12) {
     const ema12 = new EMA({ period: 12, values: closes });
     result.ema_12 = Array.from({ length: closes.length }, (_, i) =>
-      i < 11 ? null : ema12.result[i - 11] || null
+      i < 11 ? null : ema12.result[i - 11] ?? null
     );
   } else {
     result.ema_12 = Array(closes.length).fill(null);
@@ -38,7 +38,7 @@ function computeIndicators(closes) {
   if (closes.length >= 26) {
     const ema26 = new EMA({ period: 26, values: closes });
     result.ema_26 = Array.from({ length: closes.length }, (_, i) =>
-      i < 25 ? null : ema26.result[i - 25] || null
+      i < 25 ? null : ema26.result[i - 25] ?? null
     );
   } else {
     result.ema_26 = Array(closes.length).fill(null);
@@ -48,7 +48,7 @@ function computeIndicators(closes) {
   if (closes.length >= 14) {
     const rsi = new RSI({ period: 14, values: closes });
     result.rsi = Array.from({ length: closes.length }, (_, i) =>
-      i < 13 ? null : rsi.result[i - 13] || null
+      i < 13 ? null : rsi.result[i - 13] ?? null
     );
   } else {
     result.rsi = Array(closes.length).fill(null);

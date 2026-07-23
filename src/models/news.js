@@ -7,6 +7,7 @@ module.exports = (sequelize, DataTypes) => {
     publishedAt: DataTypes.DATE,
     type: { type: DataTypes.STRING, defaultValue: 'company' },
     thumbnail: DataTypes.STRING,
+    // Note: ARRAY is PostgreSQL-only. App requires PostgreSQL.
     relatedTickers: { type: DataTypes.ARRAY(DataTypes.STRING), defaultValue: [] },
   }, { timestamps: true });
 
