@@ -4,9 +4,20 @@ interface StockCardProps {
   ticker: string;
   price?: number;
   change?: number;
+  marketCap?: number | null;
+  peRatio?: number | null;
 }
 
-export default function StockCard({ ticker, price = 0, change = 0 }: StockCardProps) {
+function big(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  const abs = Math.abs(n);
+  if (abs >= 1e12) return (n / 1e12).toFixed(2) + "T";
+  if (abs >= 1e9)  return (n / 1e9).toFixed(2) + "B";
+  if (abs >= 1e6)  return (n / 1e6).toFixed(2) + "M";
+  return String(n);
+}
+
+export default function StockCard({ ticker, price = 0, change = 0, marketCap, peRatio }: StockCardProps) {
   const isPositive = change >= 0;
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 flex flex-col h-full">
@@ -18,8 +29,8 @@ export default function StockCard({ ticker, price = 0, change = 0 }: StockCardPr
       </div>
       <p className="text-2xl font-bold text-gray-100">${price.toFixed(2)}</p>
       <div className="mt-2 text-sm text-gray-400">
-        <span>Market Cap: — </span>
-        <span>P/E: — </span>
+        <span>Market Cap: {big(marketCap)} </span>
+        <span>P/E: {peRatio != null ? peRatio.toFixed(2) : "—"}</span>
       </div>
     </div>
   );
