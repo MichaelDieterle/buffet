@@ -4,3 +4,6 @@ dist/
 client/.env
 client/dist/
 .next/
+*.bak
+*.fixed
+smoke-test.js
