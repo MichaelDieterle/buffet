@@ -240,7 +240,7 @@ router.get('/:symbol/indicators', yahooLimiter, async (req, res) => {
 });
 
 // POST trigger a manual refresh for one stock
-router.post('/:symbol/refresh', requireAdminKey, async (req, res) => {
+router.post('/:symbol/refresh', async (req, res) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });
