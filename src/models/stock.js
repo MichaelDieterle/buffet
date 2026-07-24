@@ -1,4 +1,4 @@
-﻿module.exports = (sequelize, DataTypes) => {
+module.exports = (sequelize, DataTypes) => {
   const Stock = sequelize.define('Stock', {
     symbol: { type: DataTypes.STRING, unique: true, allowNull: false },
     name: { type: DataTypes.STRING, allowNull: false },
@@ -28,7 +28,7 @@
     Stock.hasMany(models.Earning, { foreignKey: 'stockId', as: 'earnings' });
     Stock.hasMany(models.CalendarEvent, { foreignKey: 'stockId', as: 'calendarEvents' });
     Stock.hasMany(models.Fundamental, { foreignKey: 'stockId', as: 'fundamentals' });
-    Stock.belongsToMany(models.Stock, { as: 'CompetedWith', through: models.Competitor, foreignKey: 'stockId', otherKey: 'competitorId' });
+    // Note: Stock↔Stock via Competitor is handled by hasMany(Competitor) above
     Stock.belongsToMany(models.Comparison, { through: models.ComparisonItem, foreignKey: 'stockId' });
   };
 
