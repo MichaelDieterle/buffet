@@ -1,6 +1,7 @@
 module.exports = (sequelize, DataTypes) => {
   const Fundamental = sequelize.define('Fundamental', {
     snapshotAt: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+    snapshotDate: { type: DataTypes.DATEONLY },  // daily dedup key (YYYY-MM-DD)
     peRatio: DataTypes.FLOAT,
     forwardPe: DataTypes.FLOAT,
     pegRatio: DataTypes.FLOAT,
@@ -54,7 +55,12 @@ module.exports = (sequelize, DataTypes) => {
     volume: DataTypes.BIGINT,
     avgVolume: DataTypes.BIGINT,
     previousClose: DataTypes.FLOAT,
-  }, { timestamps: true });
+  }, {
+    timestamps: true,
+    indexes: [
+      { unique: true, fields: ['stockId', 'snapshotDate'] }
+    ],
+  });
 
   Fundamental.associate = (models) => {
     Fundamental.belongsTo(models.Stock, { foreignKey: 'stockId', as: 'stock' });
