@@ -1,93 +1,8 @@
 import React from 'react';
 
 interface FundamentalsProps {
-  fund: any; // replace with proper type if available
+  fund: any;
 }
-
-export const Fundamentals: React.FC<FundamentalsProps> = ({ fund }) => {
-  if (!fund) return <div>Loading fundamentals...</div>;
-
-  return (
-    <div className="grid">
-      <div className="card">
-        <h4>Bewertung</h4>
-        <div className="kv"><span>KGV (PE)</span><strong>{fund.peRatio ?? '-'}</strong></div>
-        <div className="kv"><span>Forward PE</span><strong>{fund.forwardPe ?? '-'}</strong></div>
-        <div className="kv"><span>PEG</span><strong>{fund.pegRatio ?? '-'}</strong></div>
-        <div className="kv"><span>KUV (PS)</span><strong>{fund.psRatio ?? '-'}</strong></div>
-        <div className="kv"><span>KBV (PB)</span><strong>{fund.pbRatio ?? '-'}</strong></div>
-        <div className="kv"><span>EPS</span><strong>{fund.eps ?? '-'}</strong></div>
-        <div className="kv"><span>Forward EPS</span><strong>{fund.forwardEps ?? '-'}</strong></div>
-      </div>
-
-      <div className="card">
-        <h4>Dividende</h4>
-        <div className="kv"><span>Rate</span><strong>{fund.dividendRate?.toFixed(4) ?? '-'}</strong></div>
-        <div className="kv"><span>Yield</span><strong>{(fund.dividendYield != null ? (fund.dividendYield * 100).toFixed(2) : '-')}%</strong></div>
-        <div className="kv"><span>Payout Ratio</span><strong>{(fund.payoutRatio != null ? (fund.payoutRatio * 100).toFixed(2) : '-')}%</strong></div>
-        <div className="kv"><span>Ex-Dividend</span><strong>{fund.exDividendDateFromCalendar ?? '-'}</strong></div>
-        <div className="kv"><span>Zahldatum</span><strong>{fund.dividendDateFromCalendar ?? '-'}</strong></div>
-      </div>
-
-      <div className="card">
-        <h4>Gewinn & Marge</h4>
-        <div className="kv"><span>Umsatz</span><strong>{formatLarge(fund.revenue)}</strong></div>
-        <div className="kv"><span>Umsatz/Aktie</span><strong>{fund.revenuePerShare ?? '-'}</strong></div>
-        <div className="kv"><span>Umsatzwachstum</span><strong>{formatPercent(fund.revenueGrowth)}</strong></div>
-        <div className="kv"><span>Gewinnwachstum</span><strong>{formatPercent(fund.earningsGrowth)}</strong></div>
-        <div className="kv"><span>Bruttomarge</span><strong>{formatPercent(fund.grossMargins)}</strong></div>
-        <div className="kv"><span>Operative Marge</span><strong>{formatPercent(fund.operatingMargins)}</strong></div>
-        <div className="kv"><span>Nettomarge</span><strong>{formatPercent(fund.profitMargins)}</strong></div>
-      </div>
-
-      <div className="card">
-        <h4>Cashflow & Bilanz</h4>
-        <div className="kv"><span>Free Cashflow</span><strong>{formatLarge(fund.freeCashflow)}</strong></div>
-        <div className="kv"><span>Operativer Cashflow</span><strong>{formatLarge(fund.operatingCashflow)}</strong></div>
-        <div className="kv"><span>Cash</span><strong>{formatLarge(fund.totalCash)}</strong></div>
-        <div className="kv"><span>Schulden</span><strong>{formatLarge(fund.totalDebt)}</strong></div>
-        <div className="kv"><span>Debt/Equity</span><strong>{fund.debtToEquity ?? '-'}</strong></div>
-        <div className="kv"><span>Current Ratio</span><strong>{fund.currentRatio ?? '-'}</strong></div>
-        <div className="kv"><span>Quick Ratio</span><strong>{fund.quickRatio ?? '-'}</strong></div>
-        <div className="kv"><span>ROA</span><strong>{formatPercent(fund.roa)}</strong></div>
-        <div className="kv"><span>ROE</span><strong>{formatPercent(fund.roc)}</strong></div>
-      </div>
-
-      <div className="card">
-        <h4>Analysten</h4>
-        <div className="kv"><span>Kursziel (Mittel)</span><strong>{fund.targetMeanPrice ?? '-'}</strong></div>
-        <div className="kv"><span>Kursziel Hoch</span><strong>{fund.targetHighPrice ?? '-'}</strong></div>
-        <div className="kv"><span>Kursziel Tief</span><strong>{fund.targetLowPrice ?? '-'}</strong></div>
-        <div className="kv"><span>Empfehlung</span><strong>{fund.recommendationKey ?? '-'}</strong></div>
-        <div className="kv"><span>Anzahl Analysten</span><strong>{fund.numberOfAnalystOpinions ?? '-'}</strong></div>
-      </div>
-
-      <div className="card">
-        <h4>Finanzkennzahlen</h4>
-        <div className="kv"><span>Umsatzwachstum</span><strong>{fund.revenueGrowth?.toFixed(2) ?? "-"}</strong></div>
-        <div className="kv"><span>Gewinnwachstum</span><strong>{fund.earningsGrowth?.toFixed(2) ?? "-"}</strong></div>
-        <div className="kv"><span>EBIT-Marge</span><strong>{(fund.ebitMargin != null ? (fund.ebitMargin * 100).toFixed(2) : "-")}%</strong></div>
-        <div className="kv"><span>Gewinnmarge</span><strong>{(fund.profitMargin != null ? (fund.profitMargin * 100).toFixed(2) : "-")}%</strong></div>
-        <div className="kv"><span>Verschuldungsgrad</span><strong>{fund.debtToEquity?.toFixed(2) ?? "-"}</strong></div>
-        <div className="kv"><span>Liquidit�tsratio</span><strong>{fund.currentRatio?.toFixed(2) ?? "-"}</strong></div>
-        <div className="kv"><span>ROE</span><strong>{(fund.roe != null ? (fund.roe * 100).toFixed(2) : "-")}%</strong></div>
-        <div className="kv"><span>ROI</span><strong>{(fund.roi != null ? (fund.roi * 100).toFixed(2) : "-")}%</strong></div>
-      </div>
-
-      {fund.businessSummary && (
-        <div className="card wide">
-          <h4>�ber das Unternehmen</h4>
-          <p className="summary">{fund.businessSummary}</p>
-          <div className="muted">
-            {fund.website && <a href={fund.website} target="_blank" rel="noreferrer">Website</a>}{" "}
-            {fund.country && `� ${fund.country} ${fund.city ? `(${fund.city})` : ''}`}{" "}
-            {fund.employees && `� ${fund.employees.toLocaleString()} Mitarbeiter`}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
 
 function formatLarge(num: number | null | undefined): string {
   if (num == null || !Number.isFinite(num)) return '-';
@@ -104,3 +19,82 @@ function formatPercent(num: number | null | undefined): string {
   return (num * 100).toFixed(2) + '%';
 }
 
+function fmt(num: number | null | undefined, digits = 2): string {
+  if (num == null || !Number.isFinite(num)) return '-';
+  return num.toFixed(digits);
+}
+
+export const Fundamentals: React.FC<FundamentalsProps> = ({ fund }) => {
+  if (!fund) return <div>Loading fundamentals...</div>;
+
+  return (
+    <div className="grid">
+      <div className="card">
+        <h4>Bewertung</h4>
+        <div className="kv"><span>KGV (PE)</span><strong>{fmt(fund.peRatio)}</strong></div>
+        <div className="kv"><span>Forward PE</span><strong>{fmt(fund.forwardPe)}</strong></div>
+        <div className="kv"><span>PEG</span><strong>{fmt(fund.pegRatio)}</strong></div>
+        <div className="kv"><span>KUV (PS)</span><strong>{fmt(fund.psRatio)}</strong></div>
+        <div className="kv"><span>KBV (PB)</span><strong>{fmt(fund.pbRatio)}</strong></div>
+        <div className="kv"><span>EPS</span><strong>{fmt(fund.eps)}</strong></div>
+        <div className="kv"><span>Forward EPS</span><strong>{fmt(fund.forwardEps)}</strong></div>
+        <div className="kv"><span>Beta</span><strong>{fmt(fund.beta)}</strong></div>
+      </div>
+
+      <div className="card">
+        <h4>Dividende</h4>
+        <div className="kv"><span>Rate</span><strong>{fmt(fund.dividendRate, 4)}</strong></div>
+        <div className="kv"><span>Yield</span><strong>{formatPercent(fund.dividendYield)}</strong></div>
+        <div className="kv"><span>Payout Ratio</span><strong>{formatPercent(fund.payoutRatio)}</strong></div>
+        <div className="kv"><span>Ex-Dividend</span><strong>{fund.exDividendDateFromCalendar ? new Date(fund.exDividendDateFromCalendar).toLocaleDateString() : '-'}</strong></div>
+        <div className="kv"><span>Zahldatum</span><strong>{fund.dividendDateFromCalendar ? new Date(fund.dividendDateFromCalendar).toLocaleDateString() : '-'}</strong></div>
+      </div>
+
+      <div className="card">
+        <h4>Gewinn & Marge</h4>
+        <div className="kv"><span>Umsatz</span><strong>{formatLarge(fund.revenue)}</strong></div>
+        <div className="kv"><span>Umsatz/Aktie</span><strong>{fmt(fund.revenuePerShare)}</strong></div>
+        <div className="kv"><span>Umsatzwachstum</span><strong>{formatPercent(fund.revenueGrowth)}</strong></div>
+        <div className="kv"><span>Gewinnwachstum</span><strong>{formatPercent(fund.earningsGrowth)}</strong></div>
+        <div className="kv"><span>Bruttomarge</span><strong>{formatPercent(fund.grossMargins)}</strong></div>
+        <div className="kv"><span>Operative Marge</span><strong>{formatPercent(fund.operatingMargins)}</strong></div>
+        <div className="kv"><span>Nettomarge</span><strong>{formatPercent(fund.profitMargins)}</strong></div>
+      </div>
+
+      <div className="card">
+        <h4>Cashflow & Bilanz</h4>
+        <div className="kv"><span>Free Cashflow</span><strong>{formatLarge(fund.freeCashflow)}</strong></div>
+        <div className="kv"><span>Operativer Cashflow</span><strong>{formatLarge(fund.operatingCashflow)}</strong></div>
+        <div className="kv"><span>Cash</span><strong>{formatLarge(fund.totalCash)}</strong></div>
+        <div className="kv"><span>Schulden</span><strong>{formatLarge(fund.totalDebt)}</strong></div>
+        <div className="kv"><span>Debt/Equity</span><strong>{fmt(fund.debtToEquity)}</strong></div>
+        <div className="kv"><span>Current Ratio</span><strong>{fmt(fund.currentRatio)}</strong></div>
+        <div className="kv"><span>Quick Ratio</span><strong>{fmt(fund.quickRatio)}</strong></div>
+        <div className="kv"><span>Liquiditaetsratio</span><strong>{fmt(fund.currentRatio)}</strong></div>
+        <div className="kv"><span>ROA</span><strong>{formatPercent(fund.roa)}</strong></div>
+        <div className="kv"><span>ROE</span><strong>{formatPercent(fund.roc)}</strong></div>
+      </div>
+
+      <div className="card">
+        <h4>Analysten</h4>
+        <div className="kv"><span>Kursziel (Mittel)</span><strong>{fmt(fund.targetMeanPrice)}</strong></div>
+        <div className="kv"><span>Kursziel Hoch</span><strong>{fmt(fund.targetHighPrice)}</strong></div>
+        <div className="kv"><span>Kursziel Tief</span><strong>{fmt(fund.targetLowPrice)}</strong></div>
+        <div className="kv"><span>Empfehlung</span><strong>{fund.recommendationKey ?? '-'}</strong></div>
+        <div className="kv"><span>Anzahl Analysten</span><strong>{fund.numberOfAnalystOpinions ?? '-'}</strong></div>
+      </div>
+
+      {fund.businessSummary && (
+        <div className="card wide">
+          <h4>Ueber das Unternehmen</h4>
+          <p className="summary">{fund.businessSummary}</p>
+          <div className="muted">
+            {fund.website && <a href={fund.website} target="_blank" rel="noreferrer">Website</a>}{' '}
+            {fund.country && `· ${fund.country}${fund.city ? ` (${fund.city})` : ''}`}{' '}
+            {fund.employees && `· ${fund.employees.toLocaleString()} Mitarbeiter`}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
