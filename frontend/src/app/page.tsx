@@ -4,6 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import StockCard from "@/components/stock/StockCard";
 import { getQuote } from "@/lib/api";
+import axios from "axios";
+
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
+
+interface StockEntry {
+  symbol: string;
+  name: string;
+}
 
 interface StockQuote {
   ticker: string;
@@ -11,13 +19,24 @@ interface StockQuote {
   change: number;
 }
 
-const TICKERS = ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "GOOGL"];
+const FALLBACK_TICKERS = ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "GOOGL"];
 
 export default function Home() {
+  const [tickers, setTickers] = useState<string[]>(FALLBACK_TICKERS);
   const [quotes, setQuotes] = useState<Record<string, StockQuote>>({});
 
+  // Load tracked stocks from DB; fall back to hardcoded list if API unreachable
   useEffect(() => {
-    TICKERS.forEach(async (ticker) => {
+    axios.get(`${BASE_URL}/api/stocks?limit=20`)
+      .then(res => {
+        const symbols: string[] = (res.data as StockEntry[]).map(s => s.symbol);
+        if (symbols.length > 0) setTickers(symbols);
+      })
+      .catch(() => { /* keep fallback tickers */ });
+  }, []);
+
+  useEffect(() => {
+    tickers.forEach(async (ticker) => {
       try {
         const data = await getQuote(ticker);
         if (data) {
@@ -30,13 +49,13 @@ export default function Home() {
         // keep default 0 values on error
       }
     });
-  }, []);
+  }, [tickers]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 p-6">
       <h1 className="text-3xl font-bold text-center mb-8">Buffet – Stock Market Review</h1>
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {TICKERS.map((ticker) => (
+        {tickers.map((ticker) => (
           <Link key={ticker} href={`/stock/${ticker}`} className="hover:opacity-90 transition-opacity">
             <StockCard
               ticker={ticker}
