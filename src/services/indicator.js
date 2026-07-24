@@ -61,17 +61,17 @@ function computeIndicators(closes) {
     result.macd = Array.from({ length: closes.length }, (_, i) => {
       if (i < 25) return null;
       const idx = i - 25;
-      return macd.result[idx] ? macd.result[idx].MACD : null;
+      return macd.result[idx]?.MACD ?? null;
     });
     result.macd_signal = Array.from({ length: closes.length }, (_, i) => {
       if (i < 25) return null;
       const idx = i - 25;
-      return macd.result[idx] ? macd.result[idx].signal : null;
+      return macd.result[idx]?.signal ?? null;
     });
     result.macd_hist = Array.from({ length: closes.length }, (_, i) => {
       if (i < 25) return null;
       const idx = i - 25;
-      return macd.result[idx] ? macd.result[idx].histogram : null;
+      return macd.result[idx]?.histogram ?? null;
     });
   } else {
     const empty = Array(closes.length).fill(null);
