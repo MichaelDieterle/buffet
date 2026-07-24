@@ -51,10 +51,12 @@ router.get('/', async (req, res) => {
     const { sector, limit = 100, offset = 0 } = req.query;
     const where = {};
     if (sector) where.sector = sector;
+    const safeLimit = Math.min(500, Math.max(1, parseInt(limit, 10) || 100));
+    const safeOffset = Math.max(0, parseInt(offset, 10) || 0);
     const stocks = await Stock.findAll({
       where,
-      limit: parseInt(limit),
-      offset: parseInt(offset),
+      limit: safeLimit,
+      offset: safeOffset,
       order: [['symbol', 'ASC']],
     });
     res.json(stocks);
@@ -129,7 +131,7 @@ router.get('/:symbol/history', async (req, res) => {
     const history = await PriceHistory.findAll({
       where,
       order: [['date', 'DESC']],
-      limit: parseInt(limit),
+      limit: Math.min(500, Math.max(1, parseInt(limit, 10) || 100)),
     });
     res.json(history);
   } catch (err) {
