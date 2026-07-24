@@ -252,7 +252,7 @@ function StockDetail({ symbol }: { symbol: string }) {
       setFund(f);
       setNews(n);
       setCal(c);
-      setIndicators(ind);
+      setIndicators((ind as any)?.indicators ?? ind);
     } catch (err: any) {
       setError(err?.message || "Laden fehlgeschlagen");
     } finally {
