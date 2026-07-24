@@ -49,14 +49,27 @@ export default function StockPage() {
       setHistory(
         (h as any[]).map((p: any) => ({ date: p.date, value: p.close })).reverse()
       );
-      setCompetitors(
-        (c as any[]).map((comp: any) => ({
-          ticker: comp.competitorSymbol,
-          name: comp.competitorName,
-          price: 0,
-          change: 0,
-        }))
-      );
+      // Load real quotes for each competitor
+      const competitorList = (c as any[]).map((comp: any) => ({
+        ticker: comp.competitorSymbol,
+        name: comp.competitorName,
+        price: 0,
+        change: 0,
+      }));
+      setCompetitors(competitorList);
+      // Enrich with live prices in background
+      competitorList.forEach(async (comp) => {
+        try {
+          const q = await getQuote(comp.ticker);
+          if (q) {
+            setCompetitors(prev => prev.map(c =>
+              c.ticker === comp.ticker
+                ? { ...c, price: q.price ?? 0, change: q.changePercent ?? 0 }
+                : c
+            ));
+          }
+        } catch { /* non-fatal */ }
+      });
     }).catch((err) => {
       setError(err.message ?? "Fehler beim Laden");
     }).finally(() => setLoading(false));
