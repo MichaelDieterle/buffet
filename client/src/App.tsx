@@ -19,7 +19,7 @@ type Quote = {
   volume: number | null; marketCap: number | null; previousClose: number | null;
   currency: string; exchangeName?: string; marketState?: string; timestamp?: string;
 } | null;
-type Fundamentals = {
+type FundamentalsData = {
   peRatio: number | null; forwardPe: number | null; pegRatio: number | null;
   pbRatio: number | null; psRatio: number | null; eps: number | null; forwardEps: number | null;
   dividendRate: number | null; dividendYield: number | null; payoutRatio: number | null;
@@ -230,7 +230,7 @@ function App() {
 function StockDetail({ symbol }: { symbol: string }) {
   const [tab, setTab] = useState<"overview" | "fundamentals" | "news" | "calendar" | "indicators">("overview");
   const [quote, setQuote] = useState<Quote>(null);
-  const [fund, setFund] = useState<Fundamentals | null>(null);
+  const [fund, setFund] = useState<FundamentalsData | null>(null);
   const [news, setNews] = useState<NewsData | null>(null);
   const [cal, setCal] = useState<CalendarData | null>(null);
   const [indicators, setIndicators] = useState<IndicatorData | null>(null);
