@@ -15,7 +15,7 @@ export default function StockChart({ data, height = 200 }: StockChartProps) {
   }
 
   return (
-    <div className="h-[200px]">
+    <div style={{ height: `${height}px` }}>
       <ResponsiveContainer width="100%" height={height}>
         <AreaChart data={data}>
           <defs>
