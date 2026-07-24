@@ -108,8 +108,12 @@ router.get('/:symbol/export.csv', async (req, res) => {
 
     const body = [stockCsv, ...blocks].join('\r\n\r\n');
     const filename = `${stock.symbol}-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    // NOTE: This export uses a multi-section CSV format separated by blank lines and
+    // '# section_name' headers. It is NOT standard single-table CSV.
+    // Open in a text editor or use a parser that supports this format.
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-Export-Format', 'multi-section-csv');
     res.send('\uFEFF' + body);
   } catch (err) {
     console.error(err);
