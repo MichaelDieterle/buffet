@@ -4,9 +4,19 @@ interface StockMetricsProps {
     pbRatio?: number | null;
     dividendYield?: number | null;
     eps?: number | null;
-    marketCap?: string | null;
+    marketCap?: number | string | null;
     beta?: number | null;
   } | null;
+}
+
+function fmtCap(v: number | string | null | undefined): string {
+  if (v == null) return 'N/A';
+  if (typeof v === 'string') return v;
+  const abs = Math.abs(v);
+  if (abs >= 1e12) return (v / 1e12).toFixed(2) + 'T';
+  if (abs >= 1e9)  return (v / 1e9).toFixed(2) + 'B';
+  if (abs >= 1e6)  return (v / 1e6).toFixed(2) + 'M';
+  return String(v);
 }
 
 export default function StockMetrics({ metrics }: StockMetricsProps) {
@@ -47,7 +57,7 @@ export default function StockMetrics({ metrics }: StockMetricsProps) {
         </div>
         <div className="flex justify-between">
           <span className="text-gray-400">Market Cap</span>
-          <span className="text-gray-100">{marketCap ?? "N/A"}</span>
+          <span className="text-gray-100">{fmtCap(marketCap)}</span>
         </div>
       </div>
     </div>
