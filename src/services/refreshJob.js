@@ -30,11 +30,13 @@ async function refreshOneStock(stock) {
     console.error(`[refresh] fundamentals failed for ${symbol}:`, err.message);
   }
 
-  // Merge quote + fund into ONE Fundamental snapshot
+  // Merge quote + fund into ONE Fundamental snapshot (upsert per day to cap DB growth)
   if (quote || fund) {
     try {
-      await Fundamental.create({
+      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      await Fundamental.upsert({
         stockId: stock.id,
+        snapshotDate: today,
         snapshotAt: new Date(),
         // From quote
         price: quote?.price ?? null,
