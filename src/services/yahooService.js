@@ -304,20 +304,24 @@ async function fetchHistory(symbol, range = '6mo', interval = '1d') {
     const rangeMap = { '1mo': 30, '3mo': 90, '6mo': 180, '1y': 365, '2y': 730, '5y': 1825 };
     const days = rangeMap[range] || 180;
     start.setDate(end.getDate() - days);
-    const result = await yahooFinance.historical(symbol, {
+
+    // yahoo-finance2 v4 uses chart() instead of historical()
+    const result = await yahooFinance.chart(symbol, {
       period1: start,
       period2: end,
       interval,
     });
-    return (result || []).map(r => ({
-      date: r.date.toISOString().slice(0, 10),
+
+    const quotes = result?.quotes ?? result ?? [];
+    return quotes.map(r => ({
+      date: (r.date instanceof Date ? r.date : new Date(r.date)).toISOString().slice(0, 10),
       open: safeNumber(r.open),
       high: safeNumber(r.high),
       low: safeNumber(r.low),
       close: safeNumber(r.close),
       volume: safeNumber(r.volume),
-      adjClose: safeNumber(r.adjclose),
-    }));
+      adjClose: safeNumber(r.adjclose ?? r.adjClose),
+    })).filter(r => r.close !== null);
   } catch (err) {
     console.error(`[yahoo] history error for ${symbol}:`, err.message);
     return [];
