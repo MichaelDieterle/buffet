@@ -2,167 +2,29 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import StockChart from "@/components/stock/StockChart";
-import StockMetrics from "@/components/stock/StockMetrics";
-import CompetitorTable from "@/components/stock/CompetitorTable";
-import Spinner from "@/components/ui/Spinner";
-import { getQuote, getMetrics, getHistory, getCompetitors } from "@/lib/api";
+import Link from "next/link";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CalendarDays, ChevronLeft, Download, ExternalLink, Newspaper } from "lucide-react";
+import { exportUrl, getCalendar, getHistory, getMetrics, getNews, getQuote } from "@/lib/api";
 
-interface Quote {
-  price: number | null;
-  change: number | null;
-  changePercent: number | null;
-  currency: string;
-  exchangeName?: string;
-  marketState?: string;
-  dayHigh: number | null;
-  dayLow: number | null;
-  yearHigh: number | null;
-  yearLow: number | null;
-  volume: number | null;
-  marketCap: number | null;
-}
+type Quote = { price?: number; change?: number; changePercent?: number; currency?: string; exchangeName?: string; dayHigh?: number; dayLow?: number; yearHigh?: number; yearLow?: number; volume?: number; marketCap?: number };
+type News = { title?: string; publisher?: string; link?: string; providerPublishTime?: number; publishedAt?: string; summary?: string };
+type HistoryPoint = { date: string; close: number | string | null };
+type CalendarEvent = { event?: string; type?: string; date?: string; eventDate?: string };
+const money = (v?: number | null) => v == null ? "—" : v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const large = (v?: number | null) => v == null ? "—" : v >= 1e12 ? `${(v / 1e12).toFixed(2)}T` : v >= 1e9 ? `${(v / 1e9).toFixed(2)}B` : v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : String(v);
 
 export default function StockPage() {
-  const params = useParams();
-  const ticker = (params?.ticker as string ?? "").toUpperCase();
-
-  const [quote, setQuote] = useState<Quote | null>(null);
-  const [metrics, setMetrics] = useState<any>(null);
-  const [history, setHistory] = useState<{ date: string; value: number }[]>([]);
-  const [competitors, setCompetitors] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!ticker) return;
-    setLoading(true);
-    setError(null);
-    Promise.all([
-      getQuote(ticker).catch(() => null),
-      getMetrics(ticker).catch(() => null),
-      getHistory(ticker, 90).catch(() => []),
-      getCompetitors(ticker).catch(() => []),
-    ]).then(([q, m, h, c]) => {
-      setQuote(q);
-      setMetrics(m);
-      setHistory(
-        (h as any[]).map((p: any) => ({ date: p.date, value: p.close })).reverse()
-      );
-      // Load real quotes for each competitor
-      const competitorList = (c as any[]).map((comp: any) => ({
-        ticker: comp.competitorSymbol,
-        name: comp.competitorName,
-        price: 0,
-        change: 0,
-      }));
-      setCompetitors(competitorList);
-      // Enrich with live prices in background
-      competitorList.forEach(async (comp) => {
-        try {
-          const q = await getQuote(comp.ticker);
-          if (q) {
-            setCompetitors(prev => prev.map(c =>
-              c.ticker === comp.ticker
-                ? { ...c, price: q.price ?? 0, change: q.changePercent ?? 0 }
-                : c
-            ));
-          }
-        } catch { /* non-fatal */ }
-      });
-    }).catch((err) => {
-      setError(err.message ?? "Fehler beim Laden");
-    }).finally(() => setLoading(false));
-  }, [ticker]);
-
-  if (loading) return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <Spinner />
-    </div>
-  );
-
-  if (error) return (
-    <div className="text-red-400 text-center mt-20">{error}</div>
-  );
-
-  const isPositive = (quote?.changePercent ?? 0) >= 0;
-  const fmt = (n: number | null | undefined, d = 2) =>
-    n == null || !Number.isFinite(n) ? "—" : n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
-  const big = (n: number | null | undefined) => {
-    if (n == null || !Number.isFinite(n)) return "—";
-    const abs = Math.abs(n);
-    if (abs >= 1e12) return (n / 1e12).toFixed(2) + "T";
-    if (abs >= 1e9)  return (n / 1e9).toFixed(2) + "B";
-    if (abs >= 1e6)  return (n / 1e6).toFixed(2) + "M";
-    return String(n);
-  };
-
-  return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
-      {/* Header */}
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-        <div className="flex items-start justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-100">{ticker}</h1>
-            {quote?.exchangeName && (
-              <p className="text-gray-400 text-sm mt-1">{quote.exchangeName}</p>
-            )}
-          </div>
-          {quote && (
-            <div className="text-right">
-              <p className="text-3xl font-bold text-gray-100">
-                ${fmt(quote.price)} <span className="text-lg font-normal text-gray-400">{quote.currency}</span>
-              </p>
-              <p className={`text-lg font-medium mt-1 ${isPositive ? "text-green-400" : "text-red-400"}`}>
-                {isPositive ? "+" : ""}{fmt(quote.changePercent)}%
-                {" "}({isPositive ? "+" : ""}{fmt(quote.change)})
-              </p>
-            </div>
-          )}
-        </div>
-        {quote && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 text-sm">
-            <div>
-              <span className="text-gray-400">Tag-Hoch</span>
-              <p className="text-gray-100 font-medium">{fmt(quote.dayHigh)}</p>
-            </div>
-            <div>
-              <span className="text-gray-400">Tag-Tief</span>
-              <p className="text-gray-100 font-medium">{fmt(quote.dayLow)}</p>
-            </div>
-            <div>
-              <span className="text-gray-400">52W-Hoch</span>
-              <p className="text-gray-100 font-medium">{fmt(quote.yearHigh)}</p>
-            </div>
-            <div>
-              <span className="text-gray-400">52W-Tief</span>
-              <p className="text-gray-100 font-medium">{fmt(quote.yearLow)}</p>
-            </div>
-            <div>
-              <span className="text-gray-400">Volumen</span>
-              <p className="text-gray-100 font-medium">{big(quote.volume)}</p>
-            </div>
-            <div>
-              <span className="text-gray-400">Market Cap</span>
-              <p className="text-gray-100 font-medium">{big(quote.marketCap)}</p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Chart */}
-      {history.length > 0 && (
-        <div className="bg-gray-800 rounded-lg border border-gray-700 p-4">
-          <h2 className="text-lg font-semibold text-gray-100 mb-4">Kursverlauf (90 Tage)</h2>
-          <StockChart data={history} height={300} />
-        </div>
-      )}
-
-      {/* Metrics + Competitors */}
-      <div className="grid md:grid-cols-2 gap-6">
-        <StockMetrics metrics={metrics} />
-        <CompetitorTable competitors={competitors} />
-      </div>
-    </div>
-  );
+  const params = useParams(); const ticker = String(params?.ticker ?? "").toUpperCase();
+  const [quote, setQuote] = useState<Quote | null>(null); const [history, setHistory] = useState<{ date: string; value: number }[]>([]); const [metrics, setMetrics] = useState<Record<string, number | null> | null>(null); const [news, setNews] = useState<News[]>([]); const [calendar, setCalendar] = useState<CalendarEvent[]>([]); const [range, setRange] = useState(90); const [loading, setLoading] = useState(true);
+  useEffect(() => { if (!ticker) return; const load = async () => { const [q, h, m, n, c] = await Promise.all([getQuote(ticker).catch(() => null), getHistory(ticker, range).catch(() => []), getMetrics(ticker).catch(() => null), getNews(ticker).catch(() => []), getCalendar(ticker).catch(() => [])]); setQuote(q); setHistory((h as HistoryPoint[]).map((p) => ({ date: String(p.date).slice(0, 10), value: Number(p.close) })).reverse()); setMetrics(m); setNews(n as News[]); setCalendar(c as CalendarEvent[]); setLoading(false); }; void load(); }, [ticker, range]);
+  const up = (quote?.changePercent ?? 0) >= 0;
+  const metricRows = [["Market cap", large(quote?.marketCap)], ["P/E ratio", metrics?.peRatio == null ? "—" : money(metrics.peRatio)], ["Forward EPS", metrics?.eps == null ? "—" : money(metrics.eps)], ["Dividend yield", metrics?.dividendYield == null ? "—" : `${(metrics.dividendYield * 100).toFixed(2)}%`], ["Beta", metrics?.beta == null ? "—" : money(metrics.beta)], ["Volume", large(quote?.volume)]];
+  return <div className="space-y-6">
+    <Link href="/" className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-white"><ChevronLeft className="h-4 w-4" /> Markets</Link>
+    <section className="rounded-2xl border border-slate-800 bg-slate-900/45 p-5 sm:p-7"><div className="flex flex-wrap items-start justify-between gap-5"><div><div className="flex items-center gap-3"><h1 className="text-3xl font-semibold text-white">{ticker}</h1><span className="rounded-md bg-slate-800 px-2 py-1 text-xs font-medium text-slate-400">{quote?.exchangeName ?? "Stock"}</span></div><p className="mt-2 text-sm text-slate-500">Market research, data and exports</p></div><a href={exportUrl(ticker)} className="inline-flex items-center gap-2 rounded-lg bg-emerald-400 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-emerald-300"><Download className="h-4 w-4" /> Export all data</a></div><div className="mt-7 flex flex-wrap items-end justify-between gap-5"><div><p className="text-4xl font-semibold tracking-tight text-white">${money(quote?.price)}</p><p className={`mt-1 font-medium ${up ? 'text-emerald-400' : 'text-rose-400'}`}>{up ? '+' : ''}{money(quote?.change)} ({up ? '+' : ''}{money(quote?.changePercent)}%)</p></div><div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-4">{[["Day range", `${money(quote?.dayLow)} – ${money(quote?.dayHigh)}`],["52W range", `${money(quote?.yearLow)} – ${money(quote?.yearHigh)}`],["Currency",quote?.currency ?? "—"],["Status", loading ? "Refreshing…" : "Live"]].map(([k,v]) => <div key={String(k)}><p className="text-slate-500">{k}</p><p className="mt-1 font-medium text-slate-200">{v}</p></div>)}</div></div></section>
+    <section className="rounded-2xl border border-slate-800 bg-slate-900/45 p-5"><div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold text-white">Price performance</h2><p className="mt-1 text-sm text-slate-500">Historical closing price</p></div><div className="flex rounded-lg bg-slate-950 p-1">{[[30,"1M"],[90,"3M"],[180,"6M"],[365,"1Y"]].map(([days,label]) => <button key={days} onClick={() => setRange(Number(days))} className={`rounded-md px-3 py-1.5 text-xs font-medium ${range === days ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-white'}`}>{label}</button>)}</div></div><div className="h-75">{history.length ? <ResponsiveContainer width="100%" height="100%"><AreaChart data={history}><defs><linearGradient id="price" x1="0" x2="0" y1="0" y2="1"><stop stopColor="#34d399" stopOpacity={.32}/><stop offset="1" stopColor="#34d399" stopOpacity={0}/></linearGradient></defs><CartesianGrid vertical={false} stroke="#243244"/><XAxis dataKey="date" tick={{fill:'#64748b',fontSize:11}} tickLine={false} axisLine={false}/><YAxis domain={['auto','auto']} tick={{fill:'#64748b',fontSize:11}} tickLine={false} axisLine={false} width={55}/><Tooltip contentStyle={{background:'#0d1b2d',border:'1px solid #334155',borderRadius:8}} labelStyle={{color:'#94a3b8'}}/><Area type="monotone" dataKey="value" stroke="#34d399" strokeWidth={2} fill="url(#price)" /></AreaChart></ResponsiveContainer> : <div className="grid h-full place-items-center rounded-xl bg-slate-950/50 text-sm text-slate-500">No price history has been stored for this stock yet.</div>}</div></section>
+    <section className="grid gap-6 lg:grid-cols-[.9fr_1.1fr]"><div className="rounded-2xl border border-slate-800 bg-slate-900/45 p-5"><h2 className="font-semibold text-white">Key statistics</h2><div className="mt-4 divide-y divide-slate-800">{metricRows.map(([label,value]) => <div key={label} className="flex justify-between py-3 text-sm"><span className="text-slate-500">{label}</span><span className="font-medium text-slate-200">{value}</span></div>)}</div></div><div className="rounded-2xl border border-slate-800 bg-slate-900/45 p-5"><div className="flex items-center justify-between"><div><h2 className="font-semibold text-white">Latest news</h2><p className="mt-1 text-sm text-slate-500">Headlines related to {ticker}</p></div><Newspaper className="h-5 w-5 text-slate-600" /></div><div className="mt-4 divide-y divide-slate-800">{news.length ? news.slice(0,4).map((item,i) => <a key={i} href={item.link} target="_blank" rel="noreferrer" className="group block py-3"><p className="font-medium leading-5 text-slate-200 group-hover:text-emerald-300">{item.title ?? "Market update"} <ExternalLink className="inline h-3 w-3" /></p><p className="mt-1 text-xs text-slate-500">{item.publisher ?? "Yahoo Finance"}{item.providerPublishTime ? ` · ${new Date(item.providerPublishTime * 1000).toLocaleDateString()}` : ""}</p></a>) : <p className="py-6 text-sm text-slate-500">No related news available.</p>}</div></div></section>
+    <section className="rounded-2xl border border-slate-800 bg-slate-900/45 p-5"><div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-emerald-300"/><h2 className="font-semibold text-white">Upcoming events</h2></div>{calendar.length ? <div className="mt-4 grid gap-3 md:grid-cols-3">{calendar.slice(0,3).map((event,i) => <div key={i} className="rounded-lg bg-slate-950/60 p-4"><p className="text-sm font-medium text-white">{event.event || event.type || "Company event"}</p><p className="mt-1 text-xs text-slate-500">{event.date || event.eventDate || "Date to be announced"}</p></div>)}</div> : <p className="mt-3 text-sm text-slate-500">No upcoming corporate events reported.</p>}</section>
+  </div>;
 }
