@@ -3,6 +3,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const path = require('path');
+const fs = require('fs');
 const { sequelize } = require('./models');
 const dotenv = require('dotenv');
 const stockRoutes = require('./routes/stocks');
@@ -59,18 +60,38 @@ const startServer = async () => {
     console.warn('Starting server without database connectivity');
   }
 
-  // Serve static client assets in production
+  // Serve static client assets in production. On serverless platforms the
+  // frontend is usually served by the platform itself; guard against a missing
+  // build so requests never crash with a 500.
+  // Note: Express 5 / path-to-regexp v8 no longer support `app.get('*')`,
+  // so a plain middleware is used as the catch-all.
   if (process.env.NODE_ENV === 'production') {
     const clientDistPath = path.join(__dirname, '..', 'client', 'dist');
-    app.use(express.static(clientDistPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(clientDistPath, 'index.html'));
-    });
+    const indexHtml = path.join(clientDistPath, 'index.html');
+    if (fs.existsSync(indexHtml)) {
+      app.use(express.static(clientDistPath));
+      app.use((req, res) => res.sendFile(indexHtml));
+    } else {
+      app.use((req, res) => {
+        if (req.path.startsWith('/api/')) {
+          return res.status(404).json({ error: 'Not found' });
+        }
+        res.status(200).type('html').send(
+          '<!doctype html><meta charset="utf-8"><title>Buffet API</title>' +
+          '<h1>Buffet API läuft</h1><p>Frontend-Build (client/dist) ist nicht vorhanden. ' +
+          'Führe <code>npm run build</code> im Projektstamm aus.</p>'
+        );
+      });
+    }
   }
 
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+  // On Vercel/Lambda the platform imports this module and uses the exported
+  // Express app as the handler — do not bind a port there.
+  if (!process.env.VERCEL) {
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  }
 };
 
 startServer();

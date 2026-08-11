@@ -1,5 +1,11 @@
 const fs = require('fs');
 const path = require('path');
+// Explicitly load the PostgreSQL driver here. Sequelize loads these modules
+// dynamically at runtime, which Vercel's serverless bundler ("node file trace")
+// cannot see — without these requires the deployed function crashes with
+// "Please install pg package manually".
+require('pg');
+require('pg-hstore');
 const Sequelize = require('sequelize');
 const basename = path.basename(__filename);
 const env = process.env.NODE_ENV || 'development';
