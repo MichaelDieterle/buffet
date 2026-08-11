@@ -1,11 +1,11 @@
 const rateLimit = require('express-rate-limit');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
-const mcpServer = require('./server');
+const { createMcpServer } = require('./server');
 
-// Stateless mode: a fresh transport per request, no session IDs. The SDK
-// requires a new transport for every request in stateless mode (reusing one
-// causes message-ID collisions). Each request is independent, so this survives
-// serverless cold starts on Vercel.
+// Stateless mode: a fresh transport AND a fresh McpServer instance per request
+// (a single McpServer can only connect to one transport). No session IDs, so
+// every request is independent and the endpoint survives serverless cold
+// starts on Vercel.
 const mcpLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 120,
@@ -20,8 +20,9 @@ async function handleMcp(req, res) {
     enableJsonResponse: true,
     enableSseResponse: true,
   });
+  const server = createMcpServer();
   try {
-    await mcpServer.connect(transport);
+    await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
   } catch (err) {
     console.error('[mcp] transport error:', err.message);
