@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api, {
   fetchQuote,
   fetchFundamentals,
@@ -11,8 +11,8 @@ import api, {
   fetchIndicators,
 } from "./api";
 import { Fundamentals } from "./components/Fundamentals";
-type Stock = { id: number; symbol: string; name: string; sector?: string; industry?: string };
-type SearchResult = { symbol: string; name: string; exchange: string };
+type Stock = { id: number; symbol: string; name: string; sector?: string; industry?: string; lastSyncedAt?: string };
+type SearchResult = { symbol: string; name: string; exchange: string; exchangeDisplay?: string; typeDisplay?: string };
 type Quote = {
   price: number | null; change: number | null; changePercent: number | null;
   dayHigh: number | null; dayLow: number | null; yearHigh: number | null; yearLow: number | null;
@@ -113,6 +113,24 @@ function relTime(s: string | null | undefined) {
   const t = Math.floor(h / 24);
   return t + " d";
 }
+const GRADIENTS = [
+  "linear-gradient(135deg,#22d3ee,#4f8cff)",
+  "linear-gradient(135deg,#4f8cff,#aa3bff)",
+  "linear-gradient(135deg,#34d399,#22d3ee)",
+  "linear-gradient(135deg,#fbbf24,#f97316)",
+  "linear-gradient(135deg,#f472b6,#aa3bff)",
+  "linear-gradient(135deg,#22d3ee,#34d399)",
+];
+function gradientFor(symbol: string) {
+  let h = 0;
+  for (let i = 0; i < symbol.length; i++) h = (h * 31 + symbol.charCodeAt(i)) >>> 0;
+  return GRADIENTS[h % GRADIENTS.length];
+}
+function initials(name: string) {
+  const parts = name.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
 function App() {
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -134,95 +152,184 @@ function App() {
   const filtered = search
     ? stocks.filter(s => s.symbol.toUpperCase().includes(search.toUpperCase()) || s.name.toLowerCase().includes(search.toLowerCase()))
     : stocks;
+  const trackedSymbols = new Set(stocks.map(s => s.symbol.toUpperCase()));
+  const handlePick = async (r: SearchResult) => {
+    const sym = r.symbol.toUpperCase();
+    setSearch("");
+    if (trackedSymbols.has(sym)) {
+      setSelected(sym);
+    } else {
+      await createStock({ symbol: sym, name: r.name }).catch(() => {});
+      setSelected(sym);
+      await load();
+    }
+  };
   if (loading) return <div className="container">Lade...</div>;
   if (error) return <div className="container error">Fehler: {error}</div>;
   return (
     <div className="app">
       <header className="header">
-        <h1>Stock Tracker</h1>
-        <input
-          type="text"
-          placeholder="Symbol oder Name suchen"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="search"
-        />
-        <AddStockDialog onCreated={load} />
+        <div className="brand">
+          <span className="logo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M3 17l5-6 4 3 6-8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M14 6h4v4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <div className="brand-text">
+            <h1>Buffet</h1>
+            <span className="tagline">Deine Aktien, live & auf einen Blick</span>
+          </div>
+        </div>
+        <SearchBox value={search} onChange={setSearch} trackedSymbols={trackedSymbols} onPick={handlePick} />
       </header>
+      <section className="hero">
+        <div className="hero-text">
+          <h2>Dein Aktien-Dashboard</h2>
+          <p>Suche einfach nach Name oder Symbol — z. B. <strong>Apple</strong> statt AAPL. Neues Ergebnis? Ein Klick fügt es deiner Liste hinzu.</p>
+        </div>
+        <div className="hero-stats">
+          <div className="hero-stat">
+            <strong>{stocks.length}</strong>
+            <span>beobachtete Aktien</span>
+          </div>
+          <div className="hero-stat">
+            <strong>{stocks.filter(s => s.lastSyncedAt).length}</strong>
+            <span>zuletzt aktualisiert</span>
+          </div>
+        </div>
+      </section>
       <div className="layout">
         <div className="list">
-          <table>
-            <thead>
-              <tr>
-                <th>Symbol</th><th>Name</th><th>Sector</th><th>Aktionen</th>
-              </tr>
-            </thead>
-            <tbody>
+          <div className="list-head">
+            <h3>Deine Liste</h3>
+            <span className="muted">{filtered.length} von {stocks.length}</span>
+          </div>
+          {filtered.length === 0 ? (
+            <div className="empty">
+              {search ? "Keine Treffer für „" + search + "\"." : "Noch keine Aktien. Suche oben nach einem Namen oder Symbol."}
+            </div>
+          ) : (
+            <div className="stock-list">
               {filtered.map(s => (
-                <tr key={s.id} className={s.symbol === selected ? "active" : ""}>
-                  <td><strong>{s.symbol}</strong></td>
-                  <td>{s.name}</td>
-                  <td>{s.sector || "-"}</td>
-                  <td>
-                    <button onClick={() => setSelected(s.symbol)}>Details</button>
-                    <a className="csv" href={exportCsvUrl(s.symbol)} download>CSV</a>
-                  </td>
-                </tr>
+                <StockCard key={s.id} stock={s} active={s.symbol === selected} onOpen={setSelected} />
               ))}
-              {filtered.length === 0 && (
-                <tr><td colSpan={4} className="empty">Keine Treffer</td></tr>
-              )}
-            </tbody>
-          </table>
+            </div>
+          )}
         </div>
         <div className="detail">
           {selected ? (
             <StockDetail symbol={selected} />
           ) : (
-            <div className="placeholder">Wähle einen Stock aus der Liste</div>
+            <div className="placeholder">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M3 17l5-6 4 3 6-8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <p>Wähle einen Stock aus der Liste, um Details zu sehen.</p>
+            </div>
           )}
         </div>
       </div>
     </div>
   );
-}function AddStockDialog({ onCreated }: { onCreated: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
+}
+function SearchBox({ value, onChange, trackedSymbols, onPick }: {
+  value: string;
+  onChange: (v: string) => void;
+  trackedSymbols: Set<string>;
+  onPick: (r: SearchResult) => void;
+}) {
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const doSearch = async () => {
-    if (!q) return;
-    setLoading(true);
-    try {
-      const r = await searchYahoo(q);
-      setResults(r);
-    } finally { setLoading(false); }
-  };
-  const pick = async (r: SearchResult) => {
-    await createStock({ symbol: r.symbol, name: r.name });
-    setOpen(false);
-    setQ("");
-    setResults([]);
-    onCreated();
-  };
-  if (!open) return <button className="add-btn" onClick={() => setOpen(true)}>+ Stock hinzufügen</button>;
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const q = value.trim();
+    if (q.length < 2) {
+      setResults([]);
+      setOpen(false);
+      setNotFound(false);
+      setBusy(false);
+      return;
+    }
+    setBusy(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await searchYahoo(q);
+        const list = r.filter((x: SearchResult) => x.symbol);
+        setResults(list);
+        setNotFound(list.length === 0);
+        setOpen(true);
+      } catch (err: any) {
+        setResults([]);
+        setNotFound(false);
+      } finally {
+        setBusy(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [value]);
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
   return (
-    <div className="add-dialog">
+    <div className="searchbox" ref={ref}>
+      <svg className="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+        <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
       <input
-        autoFocus
-        placeholder="z. B. AAPL, SAP, TSLA"
-        value={q}
-        onChange={e => setQ(e.target.value)}
-        onKeyDown={e => { if (e.key === "Enter") doSearch(); }}
+        type="text"
+        placeholder="Name oder Symbol suchen — z. B. Apple, SAP, TSLA"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onFocus={() => { if (results.length) setOpen(true); }}
       />
-      <button onClick={doSearch} disabled={loading}>Suchen</button>
-      <button onClick={() => setOpen(false)}>✕</button>
-      <div className="add-results">
-        {results.map(r => (
-          <div key={r.symbol} className="add-result" onClick={() => pick(r)}>
-            <strong>{r.symbol}</strong> — {r.name} <span className="muted">{r.exchange}</span>
-          </div>
-        ))}
+      {busy && <span className="spinner" />}
+      {open && (
+        <div className="search-dropdown">
+          {notFound && <div className="search-empty">Keine Treffer</div>}
+          {results.map(r => {
+            const tracked = trackedSymbols.has(r.symbol.toUpperCase());
+            return (
+              <div key={r.symbol} className="search-result" onClick={() => { setOpen(false); onPick(r); }}>
+                <div className="result-avatar" style={{ background: gradientFor(r.symbol) }}>{initials(r.name)}</div>
+                <div className="result-body">
+                  <strong>{r.symbol}</strong>
+                  <span>{r.name}</span>
+                  <span className="muted">{r.exchangeDisplay || r.exchange || r.typeDisplay || ""}</span>
+                </div>
+                <span className={tracked ? "result-badge" : "result-badge add"}>{tracked ? "Öffnen" : "+ Hinzufügen"}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+function StockCard({ stock, active, onOpen }: { stock: Stock; active: boolean; onOpen: (s: string) => void }) {
+  return (
+    <div className={active ? "stock-card active" : "stock-card"} onClick={() => onOpen(stock.symbol)}>
+      <div className="stock-avatar" style={{ background: gradientFor(stock.symbol) }}>{initials(stock.name || stock.symbol)}</div>
+      <div className="stock-info">
+        <div className="stock-symbol">{stock.symbol}</div>
+        <div className="stock-name">{stock.name}</div>
+        {stock.sector && <span className="chip">{stock.sector}</span>}
+      </div>
+      <div className="stock-actions" onClick={e => e.stopPropagation()}>
+        <button className="btn-details">Details</button>
+        <a className="btn-csv" href={exportCsvUrl(stock.symbol)} download title="CSV exportieren" onClick={e => e.stopPropagation()}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </a>
       </div>
     </div>
   );
@@ -275,7 +382,12 @@ function StockDetail({ symbol }: { symbol: string }) {
           <button onClick={handleRefresh} disabled={refreshing}>
             {refreshing ? "Aktualisiere..." : "Daten aktualisieren"}
           </button>
-          <a className="csv" href={exportCsvUrl(symbol)} download>CSV Export</a>
+          <a className="btn-csv" href={exportCsvUrl(symbol)} download title="CSV exportieren">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </a>
         </div>
       </div>
       {loading && !quote && <div className="muted">Lade Daten...</div>}
@@ -285,7 +397,7 @@ function StockDetail({ symbol }: { symbol: string }) {
           <div className="price">
             {fmt(quote.price)} <span className="cur">{quote.currency}</span>
           </div>
-          <div className="change">
+          <div className={quote.change != null && quote.change < 0 ? "change down" : "change up"}>
             {quote.change != null ? (quote.change >= 0 ? "+" : "") + fmt(quote.change) : "-"}
             {" "}
             {quote.changePercent != null ? "(" + pct(quote.changePercent) + ")" : ""}
@@ -450,4 +562,3 @@ function formatNumber(num: number | null | undefined): string {
   return num.toString();
 }
 export default App;
-
