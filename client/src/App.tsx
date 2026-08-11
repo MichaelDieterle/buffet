@@ -11,6 +11,7 @@ import api, {
   fetchIndicators,
 } from "./api";
 import { Fundamentals } from "./components/Fundamentals";
+import { PriceChart } from "./components/PriceChart";
 type Stock = { id: number; symbol: string; name: string; sector?: string; industry?: string; lastSyncedAt?: string };
 type SearchResult = { symbol: string; name: string; exchange: string; exchangeDisplay?: string; typeDisplay?: string };
 type Quote = {
@@ -86,7 +87,7 @@ function fmt(n: number | null | undefined, digits = 2) {
 }
 function pct(n: number | null | undefined) {
   if (n == null || !Number.isFinite(n)) return "-";
-  return (n * 100).toFixed(2) + "%";
+  return n.toFixed(2) + "%";
 }
 function big(n: number | null | undefined) {
   if (n == null || !Number.isFinite(n)) return "-";
@@ -398,7 +399,7 @@ function StockDetail({ symbol }: { symbol: string }) {
             {fmt(quote.price)} <span className="cur">{quote.currency}</span>
           </div>
           <div className={quote.change != null && quote.change < 0 ? "change down" : "change up"}>
-            {quote.change != null ? (quote.change >= 0 ? "+" : "") + fmt(quote.change) : "-"}
+            {quote.change != null ? (quote.change >= 0 ? "+" : "") + fmt(quote.change) + " " + (quote.currency || "") : "-"}
             {" "}
             {quote.changePercent != null ? "(" + pct(quote.changePercent) + ")" : ""}
           </div>
@@ -416,33 +417,38 @@ function StockDetail({ symbol }: { symbol: string }) {
           </button>
         ))}
       </div>
-      {tab === "overview" && quote && (
-        <div className="grid">
-          <div className="card">
-            <h4>Tag</h4>
-            <div className="kv"><span>Hoch</span><strong>{fmt(quote.dayHigh)}</strong></div>
-            <div className="kv"><span>Tief</span><strong>{fmt(quote.dayLow)}</strong></div>
-            <div className="kv"><span>Volumen</span><strong>{big(quote.volume)}</strong></div>
-            <div className="kv"><span>Vortag</span><strong>{fmt(quote.previousClose)}</strong></div>
-          </div>
-          <div className="card">
-            <h4>52-Wochen</h4>
-            <div className="kv"><span>Hoch</span><strong>{fmt(quote.yearHigh)}</strong></div>
-            <div className="kv"><span>Tief</span><strong>{fmt(quote.yearLow)}</strong></div>
-          </div>
-          <div className="card">
-            <h4>Marktkapitalisierung</h4>
-            <div className="kv"><span>Market Cap</span><strong>{big(quote.marketCap)}</strong></div>
-          </div>
-          {fund && (
-            <div className="card">
-              <h4>Bewertung</h4>
-              <div className="kv"><span>KGV (PE)</span><strong>{fmt(fund.peRatio)}</strong></div>
-              <div className="kv"><span>Forward PE</span><strong>{fmt(fund.forwardPe)}</strong></div>
-              <div className="kv"><span>PEG</span><strong>{fmt(fund.pegRatio)}</strong></div>
+      {tab === "overview" && (
+        <>
+          <PriceChart symbol={symbol} />
+          {quote && (
+            <div className="grid">
+              <div className="card">
+                <h4>Tag</h4>
+                <div className="kv"><span>Hoch</span><strong>{fmt(quote.dayHigh)}</strong></div>
+                <div className="kv"><span>Tief</span><strong>{fmt(quote.dayLow)}</strong></div>
+                <div className="kv"><span>Volumen</span><strong>{big(quote.volume)}</strong></div>
+                <div className="kv"><span>Vortag</span><strong>{fmt(quote.previousClose)}</strong></div>
+              </div>
+              <div className="card">
+                <h4>52-Wochen</h4>
+                <div className="kv"><span>Hoch</span><strong>{fmt(quote.yearHigh)}</strong></div>
+                <div className="kv"><span>Tief</span><strong>{fmt(quote.yearLow)}</strong></div>
+              </div>
+              <div className="card">
+                <h4>Marktkapitalisierung</h4>
+                <div className="kv"><span>Market Cap</span><strong>{big(quote.marketCap)}</strong></div>
+              </div>
+              {fund && (
+                <div className="card">
+                  <h4>Bewertung</h4>
+                  <div className="kv"><span>KGV (PE)</span><strong>{fmt(fund.peRatio)}</strong></div>
+                  <div className="kv"><span>Forward PE</span><strong>{fmt(fund.forwardPe)}</strong></div>
+                  <div className="kv"><span>PEG</span><strong>{fmt(fund.pegRatio)}</strong></div>
+                </div>
+              )}
             </div>
           )}
-        </div>
+        </>
       )}
       {tab === "fundamentals" && fund && (
         <Fundamentals fund={fund} />

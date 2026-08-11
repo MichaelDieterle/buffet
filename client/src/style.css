@@ -495,3 +495,65 @@ body {
 .error { color: var(--red); padding: 12px; }
 .container { padding: 40px; }
 .muted { color: var(--text-dim); font-size: 12px; }
+
+/* ---------- Chart ---------- */
+.chart {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.chart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.chart-head h4 {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.chart-ranges { display: flex; gap: 4px; }
+.chart-ranges button {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+.chart-ranges button:hover { color: var(--text); }
+.chart-ranges button.active {
+  color: var(--text-h);
+  background: rgba(79, 140, 255, 0.14);
+  border-color: rgba(79, 140, 255, 0.35);
+}
+.chart-stats {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.chart-stat span { display: block; font-size: 11px; color: var(--text-dim); }
+.chart-stat strong { font-size: 16px; color: var(--text-h); font-weight: 600; }
+.chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.chart-empty {
+  padding: 40px 12px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 13px;
+}

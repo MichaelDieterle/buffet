@@ -31,5 +31,8 @@ export function exportCsvUrl(symbol: string) {
 export async function fetchIndicators(symbol: string) {
   return api.get(`/stocks/${symbol}/indicators`).then(r => r.data);
 }
+export async function fetchHistory(symbol: string, days = 90) {
+  return api.get(`/stocks/${symbol}/history`, { params: { days } }).then(r => r.data);
+}
 
 export default api;
