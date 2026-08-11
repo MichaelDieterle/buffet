@@ -28,23 +28,25 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// API routes
-app.use('/api/stocks', stockRoutes);
-app.use('/api/stocks', competitorRoutes);
-app.use('/api/comparisons', comparisonRoutes);
-app.use('/api/stocks', exportRoutes);
+// Lazy DB initialization shared by all API requests. On serverless (Vercel) the
+// module is imported and the very first request can arrive before the async
+// sequelize.sync() has finished, causing a transient "relation does not exist"
+// 500. Await a single shared promise before handling API requests. A cooldown
+// prevents hammering a temporarily unreachable database.
+let dbInitPromise = null;
+let lastDbInitAttempt = 0;
+const DB_INIT_COOLDOWN_MS = 30000;
 
-// Test DB connection and start server
-const startServer = async () => {
-  // Health check endpoint (before static middleware)
-  app.get('/health', (req, res) => {
-    res.json({ status: 'ok' });
-  });
-
-  try {
+function initDb() {
+  if (dbInitPromise) return dbInitPromise;
+  if (Date.now() - lastDbInitAttempt < DB_INIT_COOLDOWN_MS) {
+    return Promise.resolve(false);
+  }
+  lastDbInitAttempt = Date.now();
+  dbInitPromise = (async () => {
     await sequelize.authenticate();
     console.log('Database connected...');
-    // Use alter only in development; in production rely on migrations
+    // Use alter only in development; in production rely on migrations.
     if (process.env.NODE_ENV !== 'production') {
       await sequelize.sync({ alter: true });
     } else {
@@ -55,10 +57,34 @@ const startServer = async () => {
     if (process.env.DISABLE_REFRESH_JOB !== 'true') {
       refreshJob.start();
     }
-  } catch (err) {
-    console.error('Unable to connect to database:', err);
-    console.warn('Starting server without database connectivity');
-  }
+    return true;
+  })().catch((err) => {
+    console.error('Unable to connect to database:', err.message);
+    dbInitPromise = null; // allow a retry after the cooldown window
+    return false;
+  });
+  return dbInitPromise;
+}
+
+app.use('/api', async (req, res, next) => {
+  await initDb();
+  next();
+});
+
+// API routes
+app.use('/api/stocks', stockRoutes);
+app.use('/api/stocks', competitorRoutes);
+app.use('/api/comparisons', comparisonRoutes);
+app.use('/api/stocks', exportRoutes);
+
+// Start server
+const startServer = async () => {
+  // Health check endpoint (before static middleware)
+  app.get('/health', (req, res) => {
+    res.json({ status: 'ok' });
+  });
+
+  await initDb();
 
   // Serve static client assets in production. On serverless platforms the
   // frontend is usually served by the platform itself; guard against a missing
