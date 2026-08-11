@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const { Stock, News, Fundamental, Earning, Dividend, CalendarEvent } = require('../models');
-const yahoo = require('./yahooService');
+const provider = require('./provider');
 
 const DEFAULT_CRON = process.env.REFRESH_CRON || '*/15 * * * *';
 let task = null;
@@ -16,7 +16,7 @@ async function refreshOneStock(stock) {
   // Fetch quote and fundamentals independently (errors are non-fatal)
   let quote = null;
   try {
-    quote = await yahoo.fetchQuote(symbol);
+    quote = await provider.fetchQuote(symbol);
     result.steps.quote = !!quote;
   } catch (err) {
     console.error(`[refresh] quote failed for ${symbol}:`, err.message);
@@ -24,7 +24,7 @@ async function refreshOneStock(stock) {
 
   let fund = null;
   try {
-    fund = await yahoo.fetchFundamentals(symbol);
+    fund = await provider.fetchFundamentals(symbol);
     result.steps.fundamentals = !!fund;
   } catch (err) {
     console.error(`[refresh] fundamentals failed for ${symbol}:`, err.message);
@@ -101,7 +101,7 @@ async function refreshOneStock(stock) {
 
   // News – already uses findOrCreate
   try {
-    const news = await yahoo.fetchNews(symbol);
+    const news = await provider.fetchNews(symbol);
     result.steps.news = news.all.length;
     for (const n of news.all) {
       try {
@@ -127,7 +127,7 @@ async function refreshOneStock(stock) {
 
   // Calendar events – use findOrCreate/upsert to avoid duplicates
   try {
-    const calendar = await yahoo.fetchCalendar(symbol);
+    const calendar = await provider.fetchCalendar(symbol);
     result.steps.calendar = calendar.events?.length || 0;
     for (const ev of calendar.events || []) {
       try {
@@ -150,12 +150,17 @@ async function refreshOneStock(stock) {
           });
         } else if (ev.type === 'ex-dividend' || ev.type === 'dividend-payment') {
           const exDate = ev.type === 'ex-dividend' ? (ev.date ? new Date(ev.date) : null) : null;
+          const payDate = ev.type === 'dividend-payment' ? (ev.date ? new Date(ev.date) : null) : null;
+          const where = ev.type === 'dividend-payment'
+            ? { stockId: stock.id, payDate }
+            : { stockId: stock.id, exDate };
           await Dividend.findOrCreate({
-            where: { stockId: stock.id, exDate },
+            where,
             defaults: {
               amount: null,
               currency: null,
-              payDate: ev.type === 'dividend-payment' ? (ev.date ? new Date(ev.date) : null) : null,
+              payDate,
+              exDate,
               recordDate: null,
               declarationDate: null,
               frequency: null,
@@ -243,7 +248,11 @@ function stop() {
 }
 
 function getStatus() {
-  return { running, lastRun, lastError, stats, cron: DEFAULT_CRON, isScheduled: !!task };
+  return {
+    running, lastRun, lastError, stats, cron: DEFAULT_CRON, isScheduled: !!task,
+    provider: provider.name,
+    fallbacks: provider.fallbacks,
+  };
 }
 
 module.exports = { start, stop, refreshAll, refreshOneStock, getStatus };

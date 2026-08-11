@@ -7,6 +7,7 @@ import StockMetrics from "@/components/stock/StockMetrics";
 import CompetitorTable from "@/components/stock/CompetitorTable";
 import Spinner from "@/components/ui/Spinner";
 import { getQuote, getMetrics, getHistory, getCompetitors } from "@/lib/api";
+import type { HistoricalData, Metrics } from "@/lib/types";
 
 interface Quote {
   price: number | null;
@@ -23,34 +24,55 @@ interface Quote {
   marketCap: number | null;
 }
 
+interface CompetitorRow {
+  id: number;
+  competitorSymbol: string;
+  competitorName: string;
+  relationType: string;
+}
+
+interface ChartPoint {
+  date: string;
+  value: number;
+}
+
+interface DisplayCompetitor {
+  ticker: string;
+  name: string;
+  price: number;
+  change: number;
+}
+
 export default function StockPage() {
   const params = useParams();
   const ticker = (params?.ticker as string ?? "").toUpperCase();
 
   const [quote, setQuote] = useState<Quote | null>(null);
-  const [metrics, setMetrics] = useState<any>(null);
-  const [history, setHistory] = useState<{ date: string; value: number }[]>([]);
-  const [competitors, setCompetitors] = useState<any[]>([]);
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [history, setHistory] = useState<ChartPoint[]>([]);
+  const [competitors, setCompetitors] = useState<DisplayCompetitor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!ticker) return;
-    setLoading(true);
-    setError(null);
+    let cancelled = false;
     Promise.all([
       getQuote(ticker).catch(() => null),
       getMetrics(ticker).catch(() => null),
       getHistory(ticker, 90).catch(() => []),
       getCompetitors(ticker).catch(() => []),
     ]).then(([q, m, h, c]) => {
+      if (cancelled) return;
       setQuote(q);
       setMetrics(m);
       setHistory(
-        (h as any[]).map((p: any) => ({ date: p.date, value: p.close })).reverse()
+        (h as HistoricalData[])
+          .map((p) => ({ date: p.date, value: p.close ?? 0 }))
+          .reverse()
       );
       // Load real quotes for each competitor
-      const competitorList = (c as any[]).map((comp: any) => ({
+      const competitorList: DisplayCompetitor[] = (c as CompetitorRow[]).map((comp) => ({
         ticker: comp.competitorSymbol,
         name: comp.competitorName,
         price: 0,
@@ -70,9 +92,14 @@ export default function StockPage() {
           }
         } catch { /* non-fatal */ }
       });
+      setError(null);
     }).catch((err) => {
+      if (cancelled) return;
       setError(err.message ?? "Fehler beim Laden");
-    }).finally(() => setLoading(false));
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
   }, [ticker]);
 
   if (loading) return (

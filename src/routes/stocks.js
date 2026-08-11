@@ -3,7 +3,7 @@ const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const { Stock, PriceHistory } = require('../models');
 const { Sequelize } = require('sequelize');
-const yahoo = require('../services/yahooService');
+const provider = require('../services/provider');
 const refresh = require('../services/refreshJob');
 const indicator = require('../services/indicator');
 
@@ -66,10 +66,10 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET search via yahoo
+// GET search via provider
 router.get('/search/:query', searchLimiter, async (req, res) => {
   try {
-    const results = await yahoo.searchSymbol(req.params.query);
+    const results = await provider.searchSymbol(req.params.query);
     res.json(results);
   } catch (err) {
     console.error(err);
@@ -113,26 +113,45 @@ router.get('/:symbol', async (req, res) => {
 });
 
 // GET price history for a stock
+// Falls back to the live provider (Yahoo/Alpha Vantage/Stooq) when the symbol
+// is not tracked in the DB, no price history has been stored yet, or the DB is
+// temporarily unavailable.
 router.get('/:symbol/history', async (req, res) => {
   try {
-    const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
-    if (!stock) return res.status(404).json({ error: 'Stock not found' });
-
+    const symbol = req.params.symbol.toUpperCase();
     const { start, end, limit = 100, days } = req.query;
-    const where = { stockId: stock.id };
-    if (start) where.date = { ...(where.date || {}), [Sequelize.Op.gte]: new Date(start) };
-    if (end)   where.date = { ...(where.date || {}), [Sequelize.Op.lte]: new Date(end) };
-    if (days && !start) {
+    const safeDays = days && parseInt(days, 10) ? parseInt(days, 10) : null;
+    const where = {};
+    if (start) where.date = { [Sequelize.Op.gte]: new Date(start) };
+    if (end) where.date = { [Sequelize.Op.lte]: new Date(end) };
+    if (safeDays && !start) {
       const since = new Date();
-      since.setDate(since.getDate() - parseInt(days));
+      since.setDate(since.getDate() - safeDays);
       where.date = { [Sequelize.Op.gte]: since };
     }
 
-    const history = await PriceHistory.findAll({
-      where,
-      order: [['date', 'DESC']],
-      limit: Math.min(500, Math.max(1, parseInt(limit, 10) || 100)),
-    });
+    let history = [];
+    try {
+      const stock = await Stock.findOne({ where: { symbol } });
+      if (stock) {
+        history = await PriceHistory.findAll({
+          where: { ...where, stockId: stock.id },
+          order: [['date', 'DESC']],
+          limit: Math.min(500, Math.max(1, parseInt(limit, 10) || 100)),
+        });
+      }
+    } catch (dbErr) {
+      console.warn(`[stocks] DB unavailable for ${symbol} history, using provider fallback:`, dbErr.message);
+    }
+
+    if (history.length === 0) {
+      const providerData = await provider.fetchHistory(symbol, undefined, '1d', safeDays || 90);
+      if (providerData && providerData.length > 0) {
+        return res.json(providerData);
+      }
+      return res.status(404).json({ error: 'Stock not found' });
+    }
+
     res.json(history);
   } catch (err) {
     console.error(err);
@@ -144,8 +163,8 @@ router.get('/:symbol/history', async (req, res) => {
 router.get('/:symbol/quote', yahooLimiter, async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
-    const data = await yahoo.fetchQuote(symbol);
-    if (!data) return res.status(404).json({ error: 'No data returned from Yahoo' });
+    const data = await provider.fetchQuote(symbol);
+    if (!data) return res.status(404).json({ error: 'No data returned from provider' });
     res.json(data);
   } catch (err) {
     console.error(err);
@@ -157,7 +176,7 @@ router.get('/:symbol/quote', yahooLimiter, async (req, res) => {
 router.get('/:symbol/fundamentals', yahooLimiter, async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
-    const data = await yahoo.fetchFundamentals(symbol);
+    const data = await provider.fetchFundamentals(symbol);
     if (!data) return res.status(404).json({ error: 'No fundamentals data returned' });
     res.json(data);
   } catch (err) {
@@ -170,7 +189,7 @@ router.get('/:symbol/fundamentals', yahooLimiter, async (req, res) => {
 router.get('/:symbol/news', yahooLimiter, async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
-    const data = await yahoo.fetchNews(symbol);
+    const data = await provider.fetchNews(symbol);
     res.json(data);
   } catch (err) {
     console.error(err);
@@ -182,7 +201,7 @@ router.get('/:symbol/news', yahooLimiter, async (req, res) => {
 router.get('/:symbol/calendar', yahooLimiter, async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
-    const data = await yahoo.fetchCalendar(symbol);
+    const data = await provider.fetchCalendar(symbol);
     res.json(data);
   } catch (err) {
     console.error(err);
@@ -195,7 +214,7 @@ router.get('/:symbol/yahoo-history', yahooLimiter, async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const { range = '6mo', interval = '1d' } = req.query;
-    const data = await yahoo.fetchHistory(symbol, range, interval);
+    const data = await provider.fetchHistory(symbol, range, interval);
     res.json(data);
   } catch (err) {
     console.error(err);

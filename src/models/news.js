@@ -7,8 +7,10 @@ module.exports = (sequelize, DataTypes) => {
     publishedAt: DataTypes.DATE,
     type: { type: DataTypes.STRING, defaultValue: 'company' },
     thumbnail: DataTypes.STRING,
-    // Note: ARRAY is PostgreSQL-only. App requires PostgreSQL.
-    relatedTickers: { type: DataTypes.ARRAY(DataTypes.STRING), defaultValue: [] },
+    // ARRAY is PostgreSQL-only; fall back to JSON for local SQLite/other dialects.
+    relatedTickers: sequelize.getDialect() === 'postgres'
+      ? { type: DataTypes.ARRAY(DataTypes.STRING), defaultValue: [] }
+      : { type: DataTypes.JSON, defaultValue: [] },
   }, { timestamps: true });
 
   News.associate = (models) => {
