@@ -10,6 +10,7 @@ const stockRoutes = require('./routes/stocks');
 const comparisonRoutes = require('./routes/comparisons');
 const competitorRoutes = require('./routes/competitors');
 const exportRoutes = require('./routes/export');
+const { mcpRouter } = require('./mcp/http');
 const refreshJob = require('./services/refreshJob');
 
 dotenv.config();
@@ -76,6 +77,9 @@ app.use('/api/stocks', stockRoutes);
 app.use('/api/stocks', competitorRoutes);
 app.use('/api/comparisons', comparisonRoutes);
 app.use('/api/stocks', exportRoutes);
+
+// MCP endpoint for Claude custom connectors (remote MCP, read-only)
+app.use('/mcp', mcpRouter());
 
 // Start server
 const startServer = async () => {
