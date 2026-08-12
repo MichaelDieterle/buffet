@@ -1,8 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import api, {
-  getToken,
-  setToken,
-  login,
   fetchQuote,
   fetchFundamentals,
   fetchNews,
@@ -137,7 +134,6 @@ function initials(name: string) {
   return name.slice(0, 2).toUpperCase();
 }
 function App() {
-  const [authed, setAuthed] = useState<boolean | null>(null);
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -148,50 +144,13 @@ function App() {
     try {
       const res = await api.get<Stock[]>("/stocks");
       setStocks(res.data);
-      setAuthed(true);
     } catch (err: any) {
-      if (err?.response?.status === 401) {
-        setToken(null);
-        setAuthed(false);
-        return;
-      }
       setError("Failed to load stocks");
     } finally {
       setLoading(false);
     }
   };
   useEffect(() => { load(); }, []);
-  useEffect(() => {
-    if (authed === null && getToken()) setAuthed(true);
-  }, []);
-  const handleLogin = async (password: string) => {
-    try {
-      const res = await login(password);
-      if (res.disabled) {
-        setAuthed(true);
-        return;
-      }
-      if (res.token) {
-        setToken(res.token);
-        setAuthed(true);
-        setError(null);
-      }
-    } catch (err: any) {
-      setError(err?.response?.data?.error || "Login fehlgeschlagen");
-    }
-  };
-  const handleLogout = () => {
-    setToken(null);
-    setAuthed(false);
-    setSelected(null);
-    setStocks([]);
-  };
-  if (authed === false) {
-    return <LoginScreen onLogin={handleLogin} error={error} />;
-  }
-  if (authed === null) {
-    return <div className="container">Lade...</div>;
-  }
   const filtered = search
     ? stocks.filter(s => s.symbol.toUpperCase().includes(search.toUpperCase()) || s.name.toLowerCase().includes(search.toLowerCase()))
     : stocks;
@@ -228,7 +187,6 @@ function App() {
           </div>
         </div>
         <SearchBox value={search} onChange={setSearch} trackedSymbols={trackedSymbols} onPick={handlePick} />
-        <button className="logout-btn" onClick={handleLogout} title="Abmelden">Abmelden</button>
       </header>
       <section className="hero">
         <div className="hero-text">
@@ -281,38 +239,6 @@ function App() {
   );
 }
 
-function LoginScreen({ onLogin, error }: { onLogin: (p: string) => void; error: string | null }) {
-  const [pw, setPw] = useState("");
-  return (
-    <div className="login-screen">
-      <form className="login-card" onSubmit={(e) => { e.preventDefault(); onLogin(pw); }}>
-        <div className="brand">
-          <span className="logo">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M3 17l5-6 4 3 6-8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M14 6h4v4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-          <div className="brand-text">
-            <h1>Buffet</h1>
-            <span className="tagline">Private Watchlist</span>
-          </div>
-        </div>
-        <label className="login-label" htmlFor="pw">Passwort</label>
-        <input
-          id="pw"
-          type="password"
-          className="login-input"
-          value={pw}
-          onChange={(e) => setPw(e.target.value)}
-          autoFocus
-        />
-        {error && <div className="error">{error}</div>}
-        <button type="submit" className="login-submit">Anmelden</button>
-      </form>
-    </div>
-  );
-}
 function SearchBox({ value, onChange, trackedSymbols, onPick }: {
   value: string;
   onChange: (v: string) => void;

@@ -1,43 +1,8 @@
 import axios from 'axios';
 
-const TOKEN_KEY = 'buffet_token';
-
 const api = axios.create({
   baseURL: '/api',
 });
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem(TOKEN_KEY);
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-api.interceptors.response.use(
-  (resp) => resp,
-  (error) => {
-    if (
-      error?.response?.status === 401 &&
-      !String(error.config?.url || '').includes('/auth/login')
-    ) {
-      localStorage.removeItem(TOKEN_KEY);
-      if (window.location.pathname !== '/') window.location.reload();
-    }
-    return Promise.reject(error);
-  }
-);
-
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token: string | null) {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
-}
-
-export async function login(password: string): Promise<{ token: string | null; disabled: boolean }> {
-  return api.post('/auth/login', { password }).then((r) => r.data);
-}
 
 export async function fetchQuote(symbol: string) {
   return api.get(`/stocks/${symbol}/quote`).then(r => r.data);
