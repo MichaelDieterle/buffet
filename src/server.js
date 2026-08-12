@@ -12,6 +12,7 @@ const competitorRoutes = require('./routes/competitors');
 const exportRoutes = require('./routes/export');
 const { mcpRouter } = require('./mcp/http');
 const refreshJob = require('./services/refreshJob');
+const auth = require('./auth');
 
 dotenv.config();
 
@@ -75,13 +76,36 @@ app.use('/api', async (req, res, next) => {
   next();
 });
 
+// Login (not protected so it can issue tokens), then guard every other /api
+// route behind the app password.
+app.post('/api/auth/login', async (req, res) => {
+  if (!auth.isEnabled()) {
+    return res.json({ token: null, disabled: true });
+  }
+  const password = req.body && req.body.password;
+  if (password && password === process.env.APP_PASSWORD) {
+    return res.json({ token: auth.signToken(), disabled: false });
+  }
+  const remaining = 5000 + Math.floor(Math.random() * 500);
+  const fail = () =>
+    setTimeout(
+      () => res.status(401).json({ error: 'Falsches Passwort' }),
+      remaining
+    );
+  fail();
+});
+
+app.use('/api', auth.requireAuth);
+
 // API routes
 app.use('/api/stocks', stockRoutes);
 app.use('/api/stocks', competitorRoutes);
 app.use('/api/comparisons', comparisonRoutes);
 app.use('/api/stocks', exportRoutes);
 
-// MCP endpoint for Claude custom connectors (remote MCP, read-only)
+// MCP endpoint for Claude custom connectors (remote MCP, read-only).
+// Protected by the same app password when enabled (Authorization: Bearer <token>).
+app.use('/mcp', auth.requireAuth);
 app.use('/mcp', mcpRouter());
 
 // Start server

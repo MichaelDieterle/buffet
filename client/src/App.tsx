@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import api, {
+  getToken,
+  setToken,
+  login,
   fetchQuote,
   fetchFundamentals,
   fetchNews,
@@ -7,12 +10,13 @@ import api, {
   refreshStock,
   searchYahoo,
   createStock,
+  deleteStock,
   exportCsvUrl,
   fetchIndicators,
 } from "./api";
 import { Fundamentals } from "./components/Fundamentals";
 import { PriceChart } from "./components/PriceChart";
-type Stock = { id: number; symbol: string; name: string; sector?: string; industry?: string; lastSyncedAt?: string };
+type Stock = { id: number; symbol: string; name: string; sector?: string; industry?: string; lastSyncedAt?: string; isTracked?: boolean };
 type SearchResult = { symbol: string; name: string; exchange: string; exchangeDisplay?: string; typeDisplay?: string };
 type Quote = {
   price: number | null; change: number | null; changePercent: number | null;
@@ -133,23 +137,61 @@ function initials(name: string) {
   return name.slice(0, 2).toUpperCase();
 }
 function App() {
+  const [authed, setAuthed] = useState<boolean | null>(null);
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState<string>("");
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<{ symbol: string; name?: string } | null>(null);
   const load = async () => {
     setLoading(true);
     try {
       const res = await api.get<Stock[]>("/stocks");
       setStocks(res.data);
+      setAuthed(true);
     } catch (err: any) {
+      if (err?.response?.status === 401) {
+        setToken(null);
+        setAuthed(false);
+        return;
+      }
       setError("Failed to load stocks");
     } finally {
       setLoading(false);
     }
   };
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (authed === null && getToken()) setAuthed(true);
+  }, []);
+  const handleLogin = async (password: string) => {
+    try {
+      const res = await login(password);
+      if (res.disabled) {
+        setAuthed(true);
+        return;
+      }
+      if (res.token) {
+        setToken(res.token);
+        setAuthed(true);
+        setError(null);
+      }
+    } catch (err: any) {
+      setError(err?.response?.data?.error || "Login fehlgeschlagen");
+    }
+  };
+  const handleLogout = () => {
+    setToken(null);
+    setAuthed(false);
+    setSelected(null);
+    setStocks([]);
+  };
+  if (authed === false) {
+    return <LoginScreen onLogin={handleLogin} error={error} />;
+  }
+  if (authed === null) {
+    return <div className="container">Lade...</div>;
+  }
   const filtered = search
     ? stocks.filter(s => s.symbol.toUpperCase().includes(search.toUpperCase()) || s.name.toLowerCase().includes(search.toLowerCase()))
     : stocks;
@@ -157,13 +199,16 @@ function App() {
   const handlePick = async (r: SearchResult) => {
     const sym = r.symbol.toUpperCase();
     setSearch("");
-    if (trackedSymbols.has(sym)) {
-      setSelected(sym);
-    } else {
-      await createStock({ symbol: sym, name: r.name }).catch(() => {});
-      setSelected(sym);
-      await load();
-    }
+    setSelected({ symbol: sym, name: r.name });
+  };
+  const handleAddToWatchlist = async (r: { symbol: string; name: string }) => {
+    await createStock({ symbol: r.symbol, name: r.name }).catch(() => {});
+    await load();
+  };
+  const handleRemoveFromWatchlist = async (symbol: string) => {
+    await deleteStock(symbol).catch(() => {});
+    setSelected(null);
+    await load();
   };
   if (loading) return <div className="container">Lade...</div>;
   if (error) return <div className="container error">Fehler: {error}</div>;
@@ -183,11 +228,12 @@ function App() {
           </div>
         </div>
         <SearchBox value={search} onChange={setSearch} trackedSymbols={trackedSymbols} onPick={handlePick} />
+        <button className="logout-btn" onClick={handleLogout} title="Abmelden">Abmelden</button>
       </header>
       <section className="hero">
         <div className="hero-text">
           <h2>Dein Aktien-Dashboard</h2>
-          <p>Suche einfach nach Name oder Symbol — z. B. <strong>Apple</strong> statt AAPL. Neues Ergebnis? Ein Klick fügt es deiner Liste hinzu.</p>
+          <p>Suche einfach nach Name oder Symbol — z. B. <strong>Apple</strong> statt AAPL. Öffne einen Treffer, um Details zu sehen.</p>
         </div>
         <div className="hero-stats">
           <div className="hero-stat">
@@ -203,24 +249,24 @@ function App() {
       <div className="layout">
         <div className="list">
           <div className="list-head">
-            <h3>Deine Liste</h3>
+            <h3>Deine Watchlist</h3>
             <span className="muted">{filtered.length} von {stocks.length}</span>
           </div>
           {filtered.length === 0 ? (
             <div className="empty">
-              {search ? "Keine Treffer für „" + search + "\"." : "Noch keine Aktien. Suche oben nach einem Namen oder Symbol."}
+              {search ? "Keine Treffer für „" + search + "\"." : "Noch keine Aktien. Suche oben nach einem Namen oder Symbol und füge sie zur Watchlist hinzu."}
             </div>
           ) : (
             <div className="stock-list">
               {filtered.map(s => (
-                <StockCard key={s.id} stock={s} active={s.symbol === selected} onOpen={setSelected} />
+                <StockCard key={s.id} stock={s} active={s.symbol === selected?.symbol} onOpen={setSelected} />
               ))}
             </div>
           )}
         </div>
         <div className="detail">
           {selected ? (
-            <StockDetail symbol={selected} />
+            <StockDetail symbol={selected.symbol} name={selected.name} isTracked={trackedSymbols.has(selected.symbol)} onAdd={handleAddToWatchlist} onAdded={() => load()} onRemove={handleRemoveFromWatchlist} />
           ) : (
             <div className="placeholder">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -231,6 +277,39 @@ function App() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function LoginScreen({ onLogin, error }: { onLogin: (p: string) => void; error: string | null }) {
+  const [pw, setPw] = useState("");
+  return (
+    <div className="login-screen">
+      <form className="login-card" onSubmit={(e) => { e.preventDefault(); onLogin(pw); }}>
+        <div className="brand">
+          <span className="logo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M3 17l5-6 4 3 6-8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M14 6h4v4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <div className="brand-text">
+            <h1>Buffet</h1>
+            <span className="tagline">Private Watchlist</span>
+          </div>
+        </div>
+        <label className="login-label" htmlFor="pw">Passwort</label>
+        <input
+          id="pw"
+          type="password"
+          className="login-input"
+          value={pw}
+          onChange={(e) => setPw(e.target.value)}
+          autoFocus
+        />
+        {error && <div className="error">{error}</div>}
+        <button type="submit" className="login-submit">Anmelden</button>
+      </form>
     </div>
   );
 }
@@ -305,7 +384,7 @@ function SearchBox({ value, onChange, trackedSymbols, onPick }: {
                   <span>{r.name}</span>
                   <span className="muted">{r.exchangeDisplay || r.exchange || r.typeDisplay || ""}</span>
                 </div>
-                <span className={tracked ? "result-badge" : "result-badge add"}>{tracked ? "Öffnen" : "+ Hinzufügen"}</span>
+                <span className="result-badge">{tracked ? "Öffnen" : "Ansehen"}</span>
               </div>
             );
           })}
@@ -314,9 +393,9 @@ function SearchBox({ value, onChange, trackedSymbols, onPick }: {
     </div>
   );
 }
-function StockCard({ stock, active, onOpen }: { stock: Stock; active: boolean; onOpen: (s: string) => void }) {
+function StockCard({ stock, active, onOpen }: { stock: Stock; active: boolean; onOpen: (s: { symbol: string; name?: string }) => void }) {
   return (
-    <div className={active ? "stock-card active" : "stock-card"} onClick={() => onOpen(stock.symbol)}>
+    <div className={active ? "stock-card active" : "stock-card"} onClick={() => onOpen({ symbol: stock.symbol, name: stock.name })}>
       <div className="stock-avatar" style={{ background: gradientFor(stock.symbol) }}>{initials(stock.name || stock.symbol)}</div>
       <div className="stock-info">
         <div className="stock-symbol">{stock.symbol}</div>
@@ -324,7 +403,6 @@ function StockCard({ stock, active, onOpen }: { stock: Stock; active: boolean; o
         {stock.sector && <span className="chip">{stock.sector}</span>}
       </div>
       <div className="stock-actions" onClick={e => e.stopPropagation()}>
-        <button className="btn-details">Details</button>
         <a className="btn-csv" href={exportCsvUrl(stock.symbol)} download title="CSV exportieren" onClick={e => e.stopPropagation()}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -335,7 +413,9 @@ function StockCard({ stock, active, onOpen }: { stock: Stock; active: boolean; o
     </div>
   );
 }
-function StockDetail({ symbol }: { symbol: string }) {
+function StockDetail({ symbol, name, isTracked, onAdd, onAdded, onRemove }: {
+  symbol: string; name?: string; isTracked: boolean; onAdd: (r: { symbol: string; name: string }) => void; onAdded: () => void; onRemove: (symbol: string) => void;
+}) {
   const [tab, setTab] = useState<"overview" | "fundamentals" | "news" | "calendar" | "indicators">("overview");
   const [quote, setQuote] = useState<Quote>(null);
   const [fund, setFund] = useState<FundamentalsData | null>(null);
@@ -380,15 +460,27 @@ function StockDetail({ symbol }: { symbol: string }) {
       <div className="detail-header">
         <h2>{symbol}</h2>
         <div className="actions">
-          <button onClick={handleRefresh} disabled={refreshing}>
-            {refreshing ? "Aktualisiere..." : "Daten aktualisieren"}
-          </button>
-          <a className="btn-csv" href={exportCsvUrl(symbol)} download title="CSV exportieren">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </a>
+          {!isTracked && (
+            <button className="btn-add" onClick={() => { onAdd({ symbol, name: name || symbol }); onAdded(); }}>
+              Zur Watchlist hinzufügen
+            </button>
+          )}
+          {isTracked && (
+            <>
+              <button onClick={handleRefresh} disabled={refreshing}>
+                {refreshing ? "Aktualisiere..." : "Daten aktualisieren"}
+              </button>
+              <button className="btn-remove" onClick={() => onRemove(symbol)} title="Von der Watchlist entfernen">
+                Entfernen
+              </button>
+              <a className="btn-csv" href={exportCsvUrl(symbol)} download title="CSV exportieren">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </a>
+            </>
+          )}
         </div>
       </div>
       {loading && !quote && <div className="muted">Lade Daten...</div>}

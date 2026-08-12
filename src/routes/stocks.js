@@ -273,4 +273,17 @@ router.post('/:symbol/refresh', async (req, res) => {
   }
 });
 
+// DELETE remove a stock from the watchlist
+router.delete('/:symbol', async (req, res) => {
+  try {
+    const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
+    if (!stock) return res.status(404).json({ error: 'Stock not found' });
+    await stock.destroy();
+    res.json({ removed: req.params.symbol.toUpperCase() });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;
