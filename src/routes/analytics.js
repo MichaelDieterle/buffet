@@ -57,7 +57,7 @@ router.get('/scores', async (req, res) => {
 });
 
 // GET /api/analytics/compare?symbols=AAPL,MSFT - side-by-side metrics for comparison
-router.get('/compare', validate(schemas.analyticsCompare), async (req, res) => {
+router.get('/compare', validate({ query: schemas.analyticsCompare }), async (req, res) => {
   try {
     const { symbols } = req.query;
     const list = String(symbols || '')
@@ -101,7 +101,7 @@ router.get('/compare', validate(schemas.analyticsCompare), async (req, res) => {
 });
 
 // GET /api/analytics/news - aggregated news across the watchlist
-router.get('/news', validate(schemas.analyticsNews), async (req, res) => {
+router.get('/news', validate({ query: schemas.analyticsNews }), async (req, res) => {
   try {
     const { type, limit } = req.query;
     const list = await analytics.aggregateNews(

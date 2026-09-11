@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST create a new comparison
-router.post('/', authenticate, validate(schemas.createComparison), async (req, res) => {
+router.post('/', authenticate, validate({ body: schemas.createComparison }), async (req, res) => {
   try {
     const { name, description, items } = req.body; // items: [{ stockId, weight, notes }]
     const comparison = await Comparison.create({ name, description });
@@ -45,7 +45,7 @@ router.post('/', authenticate, validate(schemas.createComparison), async (req, r
 });
 
 // GET comparison by id with items
-router.get('/:id', validate(schemas.comparisonId), async (req, res) => {
+router.get('/:id', validate({ params: schemas.comparisonId }), async (req, res) => {
   try {
     const comparison = await Comparison.findByPk(req.params.id, {
       include: [
@@ -65,7 +65,7 @@ router.get('/:id', validate(schemas.comparisonId), async (req, res) => {
 });
 
 // PATCH update name/description and full item set
-router.patch('/:id', authenticate, validate(schemas.comparisonId), validate(schemas.updateComparison), async (req, res) => {
+router.patch('/:id', authenticate, validate({ params: schemas.comparisonId }), validate({ body: schemas.updateComparison }), async (req, res) => {
   try {
     const comparison = await Comparison.findByPk(req.params.id);
     if (!comparison) return res.status(404).json({ error: 'Comparison not found' });
@@ -99,7 +99,7 @@ router.patch('/:id', authenticate, validate(schemas.comparisonId), validate(sche
 });
 
 // POST add a stock to a comparison
-router.post('/:id/stocks', authenticate, validate(schemas.addStockToComparison), async (req, res) => {
+router.post('/:id/stocks', authenticate, validate({ params: schemas.comparisonId, body: schemas.addStockToComparison }), async (req, res) => {
   try {
     const comparison = await Comparison.findByPk(req.params.id);
     if (!comparison) return res.status(404).json({ error: 'Comparison not found' });
@@ -123,7 +123,7 @@ router.post('/:id/stocks', authenticate, validate(schemas.addStockToComparison),
 });
 
 // DELETE remove a stock from a comparison
-router.delete('/:id/stocks/:stockId', authenticate, validate(schemas.comparisonStockId), async (req, res) => {
+router.delete('/:id/stocks/:stockId', authenticate, validate({ params: schemas.comparisonStockId }), async (req, res) => {
   try {
     const destroyed = await ComparisonItem.destroy({
       where: {
@@ -140,7 +140,7 @@ router.delete('/:id/stocks/:stockId', authenticate, validate(schemas.comparisonS
 });
 
 // DELETE remove a comparison entirely
-router.delete('/:id', authenticate, validate(schemas.comparisonId), async (req, res) => {
+router.delete('/:id', authenticate, validate({ params: schemas.comparisonId }), async (req, res) => {
   try {
     const comparison = await Comparison.findByPk(req.params.id);
     if (!comparison) return res.status(404).json({ error: 'Comparison not found' });

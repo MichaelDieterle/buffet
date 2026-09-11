@@ -40,7 +40,7 @@ router.post('/_admin/refresh', authenticate, isAdmin, async (req, res) => {
 // ── PUBLIC ROUTES ──────────────────────────────────────────────────────────
 
 // GET all stocks with optional filters
-router.get('/', validate(schemas.listStocks), async (req, res) => {
+router.get('/', validate({ query: schemas.listStocks }), async (req, res) => {
   try {
     const { sector, limit = 100, offset = 0 } = req.query;
     const where = {};
@@ -61,7 +61,7 @@ router.get('/', validate(schemas.listStocks), async (req, res) => {
 });
 
 // GET search via provider
-router.get('/search/:query', searchLimiter, validate(schemas.searchStocks), async (req, res) => {
+router.get('/search/:query', searchLimiter, validate({ params: schemas.searchStocks }), async (req, res) => {
   try {
     const results = await provider.searchSymbol(req.params.query);
     res.json(results);
@@ -72,7 +72,7 @@ router.get('/search/:query', searchLimiter, validate(schemas.searchStocks), asyn
 });
 
 // POST create a new stock
-router.post('/', authenticate, validate(schemas.createStock), async (req, res) => {
+router.post('/', authenticate, validate({ body: schemas.createStock }), async (req, res) => {
   try {
     const { symbol, name, sector, industry, currency, marketCap, fetchOnCreate = true } = req.body;
     if (!symbol || !name) return res.status(400).json({ error: 'symbol and name are required' });
@@ -95,7 +95,7 @@ router.post('/', authenticate, validate(schemas.createStock), async (req, res) =
 });
 
 // GET stock by symbol
-router.get('/:symbol', validate(schemas.stockSymbol), async (req, res) => {
+router.get('/:symbol', validate({ params: schemas.stockSymbol }), async (req, res) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });
@@ -110,7 +110,7 @@ router.get('/:symbol', validate(schemas.stockSymbol), async (req, res) => {
 // Falls back to the live provider (Yahoo/Alpha Vantage/Stooq) when the symbol
 // is not tracked in the DB, no price history has been stored yet, or the DB is
 // temporarily unavailable.
-router.get('/:symbol/history', validate(schemas.history), async (req, res) => {
+router.get('/:symbol/history', validate({ params: schemas.stockSymbol, query: schemas.history }), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const { start, end, limit = 100, days } = req.query;
@@ -154,7 +154,7 @@ router.get('/:symbol/history', validate(schemas.history), async (req, res) => {
 });
 
 // GET live quote
-router.get('/:symbol/quote', yahooLimiter, validate(schemas.stockSymbol), async (req, res) => {
+router.get('/:symbol/quote', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await provider.fetchQuote(symbol);
@@ -167,7 +167,7 @@ router.get('/:symbol/quote', yahooLimiter, validate(schemas.stockSymbol), async 
 });
 
 // GET fundamentals
-router.get('/:symbol/fundamentals', yahooLimiter, validate(schemas.stockSymbol), async (req, res) => {
+router.get('/:symbol/fundamentals', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await provider.fetchFundamentals(symbol);
@@ -180,7 +180,7 @@ router.get('/:symbol/fundamentals', yahooLimiter, validate(schemas.stockSymbol),
 });
 
 // GET news
-router.get('/:symbol/news', yahooLimiter, validate(schemas.stockSymbol), async (req, res) => {
+router.get('/:symbol/news', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await provider.fetchNews(symbol);
@@ -192,7 +192,7 @@ router.get('/:symbol/news', yahooLimiter, validate(schemas.stockSymbol), async (
 });
 
 // GET calendar events
-router.get('/:symbol/calendar', yahooLimiter, validate(schemas.stockSymbol), async (req, res) => {
+router.get('/:symbol/calendar', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await provider.fetchCalendar(symbol);
@@ -204,7 +204,7 @@ router.get('/:symbol/calendar', yahooLimiter, validate(schemas.stockSymbol), asy
 });
 
 // GET yahoo history (no DB write)
-router.get('/:symbol/yahoo-history', yahooLimiter, validate(schemas.yahooHistory), async (req, res) => {
+router.get('/:symbol/yahoo-history', yahooLimiter, validate({ params: schemas.stockSymbol, query: schemas.yahooHistory }), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const { range = '6mo', interval = '1d' } = req.query;
@@ -217,7 +217,7 @@ router.get('/:symbol/yahoo-history', yahooLimiter, validate(schemas.yahooHistory
 });
 
 // GET technical indicators
-router.get('/:symbol/indicators', yahooLimiter, validate(schemas.stockSymbol), async (req, res) => {
+router.get('/:symbol/indicators', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const stock = await Stock.findOne({ where: { symbol } });
@@ -255,7 +255,7 @@ router.get('/:symbol/indicators', yahooLimiter, validate(schemas.stockSymbol), a
 });
 
 // POST trigger a manual refresh for one stock
-router.post('/:symbol/refresh', authenticate, validate(schemas.stockSymbol), async (req, res) => {
+router.post('/:symbol/refresh', authenticate, validate({ params: schemas.stockSymbol }), async (req, res) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });
@@ -268,7 +268,7 @@ router.post('/:symbol/refresh', authenticate, validate(schemas.stockSymbol), asy
 });
 
 // DELETE remove a stock from the watchlist
-router.delete('/:symbol', authenticate, validate(schemas.stockSymbol), async (req, res) => {
+router.delete('/:symbol', authenticate, validate({ params: schemas.stockSymbol }), async (req, res) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });

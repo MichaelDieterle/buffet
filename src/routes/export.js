@@ -45,7 +45,7 @@ async function getStockOr404(symbol) {
   return stock;
 }
 
-router.get('/:symbol/export.csv', validate(schemas.stockSymbol), async (req, res) => {
+router.get('/:symbol/export.csv', validate({ params: schemas.stockSymbol }), async (req, res) => {
   try {
     const stock = await getStockOr404(req.params.symbol);
     if (!stock) return res.status(404).json({ error: 'Stock not found' });

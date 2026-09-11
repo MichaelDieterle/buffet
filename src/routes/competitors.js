@@ -6,7 +6,7 @@ const router = express.Router();
 const { Stock, Competitor } = require('../models');
 
 // GET competitors for a stock
-router.get('/:symbol/competitors', validate(schemas.competitorSymbol), async (req, res) => {
+router.get('/:symbol/competitors', validate({ params: schemas.competitorSymbol }), async (req, res) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });
@@ -31,7 +31,7 @@ router.get('/:symbol/competitors', validate(schemas.competitorSymbol), async (re
 });
 
 // POST to add a competitor relationship (optional)
-router.post('/:symbol/competitors', authenticate, validate(schemas.addCompetitor), async (req, res) => {
+router.post('/:symbol/competitors', authenticate, validate({ params: schemas.competitorSymbol, body: schemas.addCompetitor }), async (req, res) => {
   try {
     const { competitorSymbol, relationType = 'peer' } = req.body;
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
@@ -62,7 +62,7 @@ router.post('/:symbol/competitors', authenticate, validate(schemas.addCompetitor
 });
 
 // DELETE competitor relationship
-router.delete('/:symbol/competitors/:competitorSymbol', authenticate, validate(schemas.removeCompetitor), async (req, res) => {
+router.delete('/:symbol/competitors/:competitorSymbol', authenticate, validate({ params: schemas.removeCompetitor }), async (req, res) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });

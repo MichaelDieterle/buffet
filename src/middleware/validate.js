@@ -17,10 +17,11 @@ const validate = (schemas) => (req, res, next) => {
     }
     next();
   } catch (err) {
+    console.log('Caught error in validate:', err);
     if (err instanceof ZodError) {
       return res.status(400).json({
         error: 'Validation failed',
-        details: err.errors.map(e => ({
+        details: err.issues.map(e => ({
           path: e.path.join('.'),
           message: e.message
         }))
