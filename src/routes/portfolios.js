@@ -10,7 +10,7 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 // GET /api/portfolios/valuation
-router.get('/valuation', authenticate, async (req, res) => {
+router.get('/valuation', authenticate, async (req, res, next) => {
   try {
     const portfolio = await Portfolio.findOne({
       where: { userId: req.user.id },
@@ -67,13 +67,12 @@ router.get('/valuation', authenticate, async (req, res) => {
       sectorDistribution: sectorDist,
     });
   } catch (err) {
-    console.error('Valuation Error:', err);
-    res.status(500).json({ error: 'Server error during valuation' });
+    next(err);
   }
 });
 
 // GET /api/portfolios
-router.get('/', authenticate, async (req, res) => {
+router.get('/', authenticate, async (req, res, next) => {
   try {
     const portfolio = await Portfolio.findOne({
       where: { userId: req.user.id },
@@ -86,12 +85,12 @@ router.get('/', authenticate, async (req, res) => {
 
     res.json(portfolio);
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
 // POST /api/portfolios/import
-router.post('/import', authenticate, upload.single('file'), async (req, res) => {
+router.post('/import', authenticate, upload.single('file'), async (req, res, next) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
@@ -146,8 +145,7 @@ router.post('/import', authenticate, upload.single('file'), async (req, res) => 
       throw err;
     }
   } catch (err) {
-    console.error('CSV Import Error:', err);
-    res.status(500).json({ error: 'Failed to import CSV' });
+    next(err);
   }
 });
 

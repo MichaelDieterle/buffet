@@ -45,7 +45,7 @@ async function getStockOr404(symbol) {
   return stock;
 }
 
-router.get('/:symbol/export.csv', validate({ params: schemas.stockSymbol }), async (req, res) => {
+router.get('/:symbol/export.csv', validate({ params: schemas.stockSymbol }), async (req, res, next) => {
   try {
     const stock = await getStockOr404(req.params.symbol);
     if (!stock) return res.status(404).json({ error: 'Stock not found' });
@@ -118,8 +118,7 @@ router.get('/:symbol/export.csv', validate({ params: schemas.stockSymbol }), asy
     res.setHeader('X-Export-Format', 'multi-section-csv');
     res.send('\uFEFF' + body);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 

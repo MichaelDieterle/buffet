@@ -40,7 +40,7 @@ router.post('/_admin/refresh', authenticate, isAdmin, async (req, res) => {
 // ── PUBLIC ROUTES ──────────────────────────────────────────────────────────
 
 // GET all stocks with optional filters
-router.get('/', validate({ query: schemas.listStocks }), async (req, res) => {
+router.get('/', validate({ query: schemas.listStocks }), async (req, res, next) => {
   try {
     const { sector, limit = 100, offset = 0 } = req.query;
     const where = {};
@@ -55,24 +55,22 @@ router.get('/', validate({ query: schemas.listStocks }), async (req, res) => {
     });
     res.json(stocks);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
 // GET search via provider
-router.get('/search/:query', searchLimiter, validate({ params: schemas.searchStocks }), async (req, res) => {
+router.get('/search/:query', searchLimiter, validate({ params: schemas.searchStocks }), async (req, res, next) => {
   try {
     const results = await provider.searchSymbol(req.params.query);
     res.json(results);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
 // POST create a new stock
-router.post('/', authenticate, validate({ body: schemas.createStock }), async (req, res) => {
+router.post('/', authenticate, validate({ body: schemas.createStock }), async (req, res, next) => {
   try {
     const { symbol, name, sector, industry, currency, marketCap, fetchOnCreate = true } = req.body;
     if (!symbol || !name) return res.status(400).json({ error: 'symbol and name are required' });
@@ -89,20 +87,18 @@ router.post('/', authenticate, validate({ body: schemas.createStock }), async (r
     }
     res.status(created ? 201 : 200).json(stock);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
 // GET stock by symbol
-router.get('/:symbol', validate({ params: schemas.stockSymbol }), async (req, res) => {
+router.get('/:symbol', validate({ params: schemas.stockSymbol }), async (req, res, next) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });
     res.json(stock);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
@@ -110,7 +106,7 @@ router.get('/:symbol', validate({ params: schemas.stockSymbol }), async (req, re
 // Falls back to the live provider (Yahoo/Alpha Vantage/Stooq) when the symbol
 // is not tracked in the DB, no price history has been stored yet, or the DB is
 // temporarily unavailable.
-router.get('/:symbol/history', validate({ params: schemas.stockSymbol, query: schemas.history }), async (req, res) => {
+router.get('/:symbol/history', validate({ params: schemas.stockSymbol, query: schemas.history }), async (req, res, next) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const { start, end, limit = 100, days } = req.query;
@@ -148,76 +144,70 @@ router.get('/:symbol/history', validate({ params: schemas.stockSymbol, query: sc
 
     res.json(history);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
 // GET live quote
-router.get('/:symbol/quote', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
+router.get('/:symbol/quote', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res, next) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await provider.fetchQuote(symbol);
     if (!data) return res.status(404).json({ error: 'No data returned from provider' });
     res.json(data);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
 // GET fundamentals
-router.get('/:symbol/fundamentals', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
+router.get('/:symbol/fundamentals', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res, next) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await provider.fetchFundamentals(symbol);
     if (!data) return res.status(404).json({ error: 'No fundamentals data returned' });
     res.json(data);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
 // GET news
-router.get('/:symbol/news', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
+router.get('/:symbol/news', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res, next) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await provider.fetchNews(symbol);
     res.json(data);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
 // GET calendar events
-router.get('/:symbol/calendar', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
+router.get('/:symbol/calendar', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res, next) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await provider.fetchCalendar(symbol);
     res.json(data);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
 // GET yahoo history (no DB write)
-router.get('/:symbol/yahoo-history', yahooLimiter, validate({ params: schemas.stockSymbol, query: schemas.yahooHistory }), async (req, res) => {
+router.get('/:symbol/yahoo-history', yahooLimiter, validate({ params: schemas.stockSymbol, query: schemas.yahooHistory }), async (req, res, next) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const { range = '6mo', interval = '1d' } = req.query;
     const data = await provider.fetchHistory(symbol, range, interval);
     res.json(data);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
 // GET technical indicators
-router.get('/:symbol/indicators', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
+router.get('/:symbol/indicators', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res, next) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const stock = await Stock.findOne({ where: { symbol } });
@@ -249,34 +239,31 @@ router.get('/:symbol/indicators', yahooLimiter, validate({ params: schemas.stock
 
     res.json({ symbol, indicators: latest });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
 // POST trigger a manual refresh for one stock
-router.post('/:symbol/refresh', authenticate, validate({ params: schemas.stockSymbol }), async (req, res) => {
+router.post('/:symbol/refresh', authenticate, validate({ params: schemas.stockSymbol }), async (req, res, next) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });
     const result = await refresh.refreshOneStock(stock);
     res.json(result);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
 // DELETE remove a stock from the watchlist
-router.delete('/:symbol', authenticate, validate({ params: schemas.stockSymbol }), async (req, res) => {
+router.delete('/:symbol', authenticate, validate({ params: schemas.stockSymbol }), async (req, res, next) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });
     await stock.destroy();
     res.json({ removed: req.params.symbol.toUpperCase() });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 

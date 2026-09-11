@@ -11,7 +11,6 @@ const authSchemas = {
     body: z.object({
       username: z.string().min(3).max(30),
       password: z.string().min(6),
-      role: z.enum(['user', 'admin']).optional(),
     }),
   }),
   login: z.object({
@@ -23,25 +22,25 @@ const authSchemas = {
 };
 
 // POST /api/auth/register
-router.post('/register', validate(authSchemas.register), async (req, res) => {
+router.post('/register', validate(authSchemas.register), async (req, res, next) => {
   try {
-    const { username, password, role } = req.body;
+    const { username, password } = req.body;
     const existing = await User.findOne({ where: { username } });
     if (existing) return res.status(400).json({ error: 'Username already taken' });
 
-    const user = await User.create({ username, password, role });
+    const user = await User.create({ username, password });
     res.status(201).json({
       id: user.id,
       username: user.username,
       role: user.role,
     });
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
 // POST /api/auth/login
-router.post('/login', validate(authSchemas.login), async (req, res) => {
+router.post('/login', validate(authSchemas.login), async (req, res, next) => {
   try {
     const { username, password } = req.body;
     const user = await User.findOne({ where: { username } });
@@ -51,7 +50,7 @@ router.post('/login', validate(authSchemas.login), async (req, res) => {
 
     const token = jwt.sign(
       { id: user.id, role: user.role },
-      process.env.JWT_SECRET || 'super-secret-key',
+      process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
@@ -60,7 +59,7 @@ router.post('/login', validate(authSchemas.login), async (req, res) => {
       user: { id: user.id, username: user.username, role: user.role },
     });
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
@@ -74,7 +73,7 @@ router.get('/google/callback',
     const user = req.user;
     const token = jwt.sign(
       { id: user.id, role: user.role },
-      process.env.JWT_SECRET || 'super-secret-key',
+      process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 

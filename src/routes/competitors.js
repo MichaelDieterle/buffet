@@ -6,7 +6,7 @@ const router = express.Router();
 const { Stock, Competitor } = require('../models');
 
 // GET competitors for a stock
-router.get('/:symbol/competitors', validate({ params: schemas.competitorSymbol }), async (req, res) => {
+router.get('/:symbol/competitors', validate({ params: schemas.competitorSymbol }), async (req, res, next) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });
@@ -25,8 +25,7 @@ router.get('/:symbol/competitors', validate({ params: schemas.competitorSymbol }
     }));
     res.json(result);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
@@ -56,8 +55,7 @@ router.post('/:symbol/competitors', authenticate, validate({ params: schemas.com
     });
     res.status(201).json(relation);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
@@ -77,8 +75,7 @@ router.delete('/:symbol/competitors/:competitorSymbol', authenticate, validate({
 
     res.json({ message: 'Competitor relationship removed' });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 

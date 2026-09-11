@@ -7,29 +7,27 @@ const provider = require('../services/provider');
 const analytics = require('../services/analytics');
 
 // GET /api/analytics/earnings - upcoming + recent earnings across the watchlist
-router.get('/earnings', async (req, res) => {
+router.get('/earnings', async (req, res, next) => {
   try {
     const list = await analytics.aggregateEarnings();
     res.json(list);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
 // GET /api/analytics/performance - return/vol/drawdown across the watchlist
-router.get('/performance', async (req, res) => {
+router.get('/performance', async (req, res, next) => {
   try {
     const list = await analytics.aggregatePerformance();
     res.json(list);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
 // GET /api/analytics/scores - fundamental scores for tracked stocks
-router.get('/scores', async (req, res) => {
+router.get('/scores', async (req, res, next) => {
   try {
     const stocks = await Stock.findAll({ where: { isTracked: true } });
     const rows = [];
@@ -51,13 +49,12 @@ router.get('/scores', async (req, res) => {
     }
     res.json(rows);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
 // GET /api/analytics/compare?symbols=AAPL,MSFT - side-by-side metrics for comparison
-router.get('/compare', validate({ query: schemas.analyticsCompare }), async (req, res) => {
+router.get('/compare', validate({ query: schemas.analyticsCompare }), async (req, res, next) => {
   try {
     const { symbols } = req.query;
     const list = String(symbols || '')
@@ -95,13 +92,12 @@ router.get('/compare', validate({ query: schemas.analyticsCompare }), async (req
     );
     res.json(results);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 
 // GET /api/analytics/news - aggregated news across the watchlist
-router.get('/news', validate({ query: schemas.analyticsNews }), async (req, res) => {
+router.get('/news', validate({ query: schemas.analyticsNews }), async (req, res, next) => {
   try {
     const { type, limit } = req.query;
     const list = await analytics.aggregateNews(
@@ -110,8 +106,7 @@ router.get('/news', validate({ query: schemas.analyticsNews }), async (req, res)
     );
     res.json(list);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    next(err);
   }
 });
 

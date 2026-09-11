@@ -12,7 +12,11 @@ const authenticate = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super-secret-key');
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      throw new Error('JWT_SECRET is not defined in environment variables');
+    }
+    const decoded = jwt.verify(token, secret);
 
     const user = await User.findByPk(decoded.id);
     if (!user) {
