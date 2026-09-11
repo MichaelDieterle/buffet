@@ -92,8 +92,14 @@ app.use('/mcp', mcpRouter());
 // Start server
 const startServer = async () => {
   // Health check endpoint (before static middleware)
-  app.get('/health', (req, res) => {
-    res.json({ status: 'ok' });
+  app.get('/health', async (req, res) => {
+    try {
+      const { sequelize } = require('./models');
+      await sequelize.authenticate();
+      res.json({ status: 'ok', database: 'connected' });
+    } catch (err) {
+      res.status(503).json({ status: 'error', database: 'disconnected', message: err.message });
+    }
   });
 
   await initDb();
