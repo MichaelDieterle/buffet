@@ -1,13 +1,13 @@
 const express = require('express');
 const multer = require('multer');
 const csv = require('csv-parser');
-const fs = require('fs');
+const { Readable } = require('stream');
 const { User, Portfolio, Holding, sequelize } = require('../models');
 const { authenticate } = require('../middleware/auth');
 const yahooService = require('../services/yahooService');
 const router = express.Router();
 
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ storage: multer.memoryStorage() });
 
 // GET /api/portfolios/valuation
 router.get('/valuation', authenticate, async (req, res) => {
@@ -97,11 +97,10 @@ router.post('/import', authenticate, upload.single('file'), async (req, res) => 
   }
 
   const results = [];
-  const filePath = req.file.path;
-
   try {
     await new Promise((resolve, reject) => {
-      fs.createReadStream(filePath)
+      const stream = Readable.from(req.file.buffer);
+      stream
         .pipe(csv())
         .on('data', (data) => results.push(data))
         .on('end', resolve)
@@ -124,8 +123,6 @@ router.post('/import', authenticate, upload.single('file'), async (req, res) => 
       });
 
       // 3. Parse and save holdings
-      // Trade Republic CSV typical columns: "Symbol", "Shares", "Average Price", "Currency"
-      // We handle potential differences in column naming
       const holdingsToCreate = results
         .filter(row => row.Symbol && row.Shares)
         .map(row => ({
@@ -140,20 +137,15 @@ router.post('/import', authenticate, upload.single('file'), async (req, res) => 
 
       await transaction.commit();
 
-      // Cleanup uploaded file
-      fs.unlinkSync(filePath);
-
       res.json({
         message: 'Portfolio imported successfully',
         count: holdingsToCreate.length,
       });
     } catch (err) {
       await transaction.rollback();
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
       throw err;
     }
   } catch (err) {
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     console.error('CSV Import Error:', err);
     res.status(500).json({ error: 'Failed to import CSV' });
   }
