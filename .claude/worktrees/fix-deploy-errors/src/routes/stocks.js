@@ -1,0 +1,283 @@
+const express = require('express');
+const rateLimit = require('express-rate-limit');
+const validate = require('../middleware/validate');
+const schemas = require('../middleware/schemas');
+const { authenticate, isAdmin } = require('../middleware/auth');
+const router = express.Router();
+const { Stock, PriceHistory } = require('../models');
+const { Sequelize } = require('sequelize');
+const provider = require('../services/provider');
+const refresh = require('../services/refreshJob');
+const indicator = require('../services/indicator');
+
+// Rate limiters
+const yahooLimiter = rateLimit({
+  windowMs: 60 * 1000,  // 1 minute
+  max: 60,              // max 60 requests per IP per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
+const searchLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { error: 'Too many search requests, please try again later.' },
+});
+
+// ── ADMIN ROUTES (must be before /:symbol to avoid shadowing) ─────────────
+// GET refresh job status
+router.get('/_admin/refresh-status', authenticate, isAdmin, async (req, res) => {
+  res.json(refresh.getStatus());
+});
+
+// POST trigger a global refresh
+router.post('/_admin/refresh', authenticate, isAdmin, async (req, res) => {
+  const result = await refresh.refreshAll();
+  res.json(result);
+});
+
+// ── PUBLIC ROUTES ──────────────────────────────────────────────────────────
+
+// GET all stocks with optional filters
+router.get('/', validate({ query: schemas.listStocks }), async (req, res) => {
+  try {
+    const { sector, limit = 100, offset = 0 } = req.query;
+    const where = {};
+    if (sector) where.sector = sector;
+    const safeLimit = Math.min(500, Math.max(1, parseInt(limit, 10) || 100));
+    const safeOffset = Math.max(0, parseInt(offset, 10) || 0);
+    const stocks = await Stock.findAll({
+      where,
+      limit: safeLimit,
+      offset: safeOffset,
+      order: [['symbol', 'ASC']],
+    });
+    res.json(stocks);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET search via provider
+router.get('/search/:query', searchLimiter, validate({ params: schemas.searchStocks }), async (req, res) => {
+  try {
+    const results = await provider.searchSymbol(req.params.query);
+    res.json(results);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST create a new stock
+router.post('/', authenticate, validate({ body: schemas.createStock }), async (req, res) => {
+  try {
+    const { symbol, name, sector, industry, currency, marketCap, fetchOnCreate = true } = req.body;
+    if (!symbol || !name) return res.status(400).json({ error: 'symbol and name are required' });
+    const upper = symbol.toUpperCase();
+    const [stock, created] = await Stock.findOrCreate({
+      where: { symbol: upper },
+      defaults: { symbol: upper, name, sector, industry, currency, marketCap },
+    });
+    if (!created && (name || sector || industry || marketCap)) {
+      await stock.update({ name: name ?? stock.name, sector, industry, marketCap });
+    }
+    if (created && fetchOnCreate) {
+      refresh.refreshOneStock(stock).catch(err => console.error('[create] initial fetch failed:', err.message));
+    }
+    res.status(created ? 201 : 200).json(stock);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET stock by symbol
+router.get('/:symbol', validate({ params: schemas.stockSymbol }), async (req, res) => {
+  try {
+    const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
+    if (!stock) return res.status(404).json({ error: 'Stock not found' });
+    res.json(stock);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET price history for a stock
+// Falls back to the live provider (Yahoo/Alpha Vantage/Stooq) when the symbol
+// is not tracked in the DB, no price history has been stored yet, or the DB is
+// temporarily unavailable.
+router.get('/:symbol/history', validate({ params: schemas.stockSymbol, query: schemas.history }), async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const { start, end, limit = 100, days } = req.query;
+    const safeDays = days && parseInt(days, 10) ? parseInt(days, 10) : null;
+    const where = {};
+    if (start) where.date = { [Sequelize.Op.gte]: new Date(start) };
+    if (end) where.date = { [Sequelize.Op.lte]: new Date(end) };
+    if (safeDays && !start) {
+      const since = new Date();
+      since.setDate(since.getDate() - safeDays);
+      where.date = { [Sequelize.Op.gte]: since };
+    }
+
+    let history = [];
+    try {
+      const stock = await Stock.findOne({ where: { symbol } });
+      if (stock) {
+        history = await PriceHistory.findAll({
+          where: { ...where, stockId: stock.id },
+          order: [['date', 'DESC']],
+          limit: Math.min(500, Math.max(1, parseInt(limit, 10) || 100)),
+        });
+      }
+    } catch (dbErr) {
+      console.warn(`[stocks] DB unavailable for ${symbol} history, using provider fallback:`, dbErr.message);
+    }
+
+    if (history.length === 0) {
+      const providerData = await provider.fetchHistory(symbol, undefined, '1d', safeDays || 90);
+      if (providerData && providerData.length > 0) {
+        return res.json(providerData);
+      }
+      return res.status(404).json({ error: 'Stock not found' });
+    }
+
+    res.json(history);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET live quote
+router.get('/:symbol/quote', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const data = await provider.fetchQuote(symbol);
+    if (!data) return res.status(404).json({ error: 'No data returned from provider' });
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET fundamentals
+router.get('/:symbol/fundamentals', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const data = await provider.fetchFundamentals(symbol);
+    if (!data) return res.status(404).json({ error: 'No fundamentals data returned' });
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET news
+router.get('/:symbol/news', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const data = await provider.fetchNews(symbol);
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET calendar events
+router.get('/:symbol/calendar', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const data = await provider.fetchCalendar(symbol);
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET yahoo history (no DB write)
+router.get('/:symbol/yahoo-history', yahooLimiter, validate({ params: schemas.stockSymbol, query: schemas.yahooHistory }), async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const { range = '6mo', interval = '1d' } = req.query;
+    const data = await provider.fetchHistory(symbol, range, interval);
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET technical indicators
+router.get('/:symbol/indicators', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const stock = await Stock.findOne({ where: { symbol } });
+    if (!stock) return res.status(404).json({ error: 'Stock not found' });
+
+    const priceHistory = await PriceHistory.findAll({
+      where: { stockId: stock.id },
+      order: [['date', 'ASC']],
+      limit: 200,
+    });
+
+    if (priceHistory.length === 0) {
+      return res.status(404).json({ error: 'No price history available' });
+    }
+
+    const plain = priceHistory.map(ph => ph.get({ plain: true }));
+    const closes = plain.map(p => parseFloat(p.close));
+    const ind = indicator.computeIndicators(closes);
+
+    const latest = {};
+    const lastIdx = closes.length - 1;
+    for (const key in ind) {
+      if (Array.isArray(ind[key])) {
+        latest[key] = ind[key][lastIdx];
+      } else {
+        latest[key] = ind[key];
+      }
+    }
+
+    res.json({ symbol, indicators: latest });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST trigger a manual refresh for one stock
+router.post('/:symbol/refresh', authenticate, validate({ params: schemas.stockSymbol }), async (req, res) => {
+  try {
+    const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
+    if (!stock) return res.status(404).json({ error: 'Stock not found' });
+    const result = await refresh.refreshOneStock(stock);
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE remove a stock from the watchlist
+router.delete('/:symbol', authenticate, validate({ params: schemas.stockSymbol }), async (req, res) => {
+  try {
+    const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
+    if (!stock) return res.status(404).json({ error: 'Stock not found' });
+    await stock.destroy();
+    res.json({ removed: req.params.symbol.toUpperCase() });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+module.exports = router;

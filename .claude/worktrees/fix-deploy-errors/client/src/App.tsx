@@ -1,0 +1,758 @@
+import { useEffect, useRef, useState } from "react";
+import api, {
+  fetchQuote,
+  fetchFundamentals,
+  fetchNews,
+  fetchCalendar,
+  refreshStock,
+  searchYahoo,
+  createStock,
+  deleteStock,
+  exportCsvUrl,
+  fetchIndicators,
+  fetchPortfolio,
+  importPortfolio,
+} from "./api";
+import { Fundamentals } from "./components/Fundamentals";
+import { PriceChart } from "./components/PriceChart";
+import EarningsDashboard from "./components/dashboards/EarningsDashboard";
+import PerformanceAnalytics from "./components/dashboards/PerformanceAnalytics";
+import ComparisonWorkspace from "./components/dashboards/ComparisonWorkspace";
+import FundamentalScore from "./components/dashboards/FundamentalScore";
+import NewsDashboard from "./components/dashboards/NewsDashboard";
+import { PortfolioAnalytics } from "./components/dashboards/PortfolioAnalytics";
+type Stock = { id: number; symbol: string; name: string; sector?: string; industry?: string; lastSyncedAt?: string; isTracked?: boolean };
+type SearchResult = { symbol: string; name: string; exchange: string; exchangeDisplay?: string; typeDisplay?: string };
+type Quote = {
+  price: number | null; change: number | null; changePercent: number | null;
+  dayHigh: number | null; dayLow: number | null; yearHigh: number | null; yearLow: number | null;
+  volume: number | null; marketCap: number | null; previousClose: number | null;
+  currency: string; exchangeName?: string; marketState?: string; timestamp?: string;
+} | null;
+type FundamentalsData = {
+  peRatio: number | null; forwardPe: number | null; pegRatio: number | null;
+  pbRatio: number | null; psRatio: number | null; eps: number | null; forwardEps: number | null;
+  dividendRate: number | null; dividendYield: number | null; payoutRatio: number | null;
+  beta: number | null; marketCap: number | null;
+  fiftyTwoWeekHigh: number | null; fiftyTwoWeekLow: number | null;
+  fiftyDayAverage: number | null; twoHundredDayAverage: number | null;
+  revenue: number | null; revenuePerShare: number | null;
+  earningsGrowth: number | null; revenueGrowth: number | null;
+  profitMargins: number | null; operatingMargins: number | null; grossMargins: number | null;
+  freeCashflow: number | null; operatingCashflow: number | null;
+  totalCash: number | null; totalDebt: number | null;
+  debtToEquity: number | null; currentRatio: number | null; quickRatio: number | null;
+  roa: number | null; roc: number | null;
+  targetMeanPrice: number | null; targetHighPrice: number | null; targetLowPrice: number | null;
+  recommendationMean: number | null; recommendationKey: string | null; numberOfAnalystOpinions: number | null;
+  sharesOutstanding: number | null; floatShares: number | null;
+  heldPercentInsiders: number | null; heldPercentInstitutions: number | null;
+  shortRatio: number | null; shortPercentOfFloat: number | null;
+  nextEarningsDate: string | null; earningsDateLow: string | null; earningsDateHigh: string | null;
+  earningsAverage: number | null; earningsLow: number | null; earningsHigh: number | null;
+  revenueAverage: number | null;
+  exDividendDateFromCalendar: string | null; dividendDateFromCalendar: string | null;
+  businessSummary: string | null; employees: number | null; website: string | null;
+  country: string | null; city: string | null; sector: string | null; industry: string | null;
+  fiscalYearEnd: string | null;
+} | null;
+type NewsItem = {
+  uuid: string; title: string; publisher: string; link: string;
+  publishedAt: string; type: "company" | "geopolitics"; relatedTickers: string[]; thumbnail?: string;
+};
+type NewsData = {
+  all: NewsItem[];
+  company: NewsItem[];
+  geopolitics: NewsItem[];
+};
+type CalendarEvent = {
+  type: string;
+  date: string | null;
+  dateLow?: string | null;
+  dateHigh?: string | null;
+  isEstimate?: boolean | null;
+  earningsAverage?: number | null;
+  earningsLow?: number | null;
+  earningsHigh?: number | null;
+  revenueAverage?: number | null;
+  description?: string | null;
+};
+type CalendarData = {
+  events: CalendarEvent[];
+};
+type IndicatorData = {
+  sma_20: number | null;
+  sma_50: number | null;
+  ema_12: number | null;
+  ema_26: number | null;
+  rsi: number | null;
+  macd: number | null;
+  macd_signal: number | null;
+  macd_hist: number | null;
+};
+function fmt(n: number | null | undefined, digits = 2) {
+  if (n == null || !Number.isFinite(n)) return "-";
+  return n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+function pct(n: number | null | undefined) {
+  if (n == null || !Number.isFinite(n)) return "-";
+  return n.toFixed(2) + "%";
+}
+function big(n: number | null | undefined) {
+  if (n == null || !Number.isFinite(n)) return "-";
+  const abs = Math.abs(n);
+  if (abs >= 1e12) return (n / 1e12).toFixed(2) + "T";
+  if (abs >= 1e9) return (n / 1e9).toFixed(2) + "B";
+  if (abs >= 1e6) return (n / 1e6).toFixed(2) + "M";
+  if (abs >= 1e3) return (n / 1e3).toFixed(2) + "K";
+  return String(n);
+}
+function dateShort(s: string | null | undefined) {
+  if (!s) return "-";
+  return new Date(s).toLocaleString();
+}
+function relTime(s: string | null | undefined) {
+  if (!s) return "gerade eben";
+  const d = new Date(s).getTime();
+  const diff = Date.now() - d;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "gerade eben";
+  if (m < 60) return m + " min";
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + " h";
+  const t = Math.floor(h / 24);
+  return t + " d";
+}
+const GRADIENTS = [
+  "linear-gradient(135deg,#22d3ee,#4f8cff)",
+  "linear-gradient(135deg,#4f8cff,#aa3bff)",
+  "linear-gradient(135deg,#34d399,#22d3ee)",
+  "linear-gradient(135deg,#fbbf24,#f97316)",
+  "linear-gradient(135deg,#f472b6,#aa3bff)",
+  "linear-gradient(135deg,#22d3ee,#34d399)",
+];
+function gradientFor(symbol: string) {
+  let h = 0;
+  for (let i = 0; i < symbol.length; i++) h = (h * 31 + symbol.charCodeAt(i)) >>> 0;
+  return GRADIENTS[h % GRADIENTS.length];
+}
+function initials(name: string) {
+  const parts = name.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+function PortfolioView() {
+  const [valuation, setValuation] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadValuation = async () => {
+    try {
+      const data = await api.get('/portfolios/valuation');
+      setValuation(data.data);
+    } catch (err: any) {
+      setError("Failed to load portfolio valuation");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadValuation();
+    const interval = setInterval(loadValuation, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    setError(null);
+    try {
+      await importPortfolio(file);
+      await loadValuation();
+    } catch (err: any) {
+      setError("Import failed: " + (err.response?.data?.error || err.message));
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  if (loading && !valuation) return <div className="muted">Lade Portfolio-Daten...</div>;
+
+  return (
+    <div className="portfolio-view">
+      <div className="portfolio-header">
+        <div className="header-main">
+          <h3>Mein Portfolio</h3>
+          <div className="portfolio-totals">
+            <div className="total-box">
+              <span className="label">Gesamtwert</span>
+              <strong className="value">{fmt(valuation?.totalValue)} €</strong>
+            </div>
+            <div className={`total-box ${valuation?.totalProfit >= 0 ? 'up' : 'down'}`}>
+              <span className="label">Gewinn/Verlust</span>
+              <strong className="value">{fmt(valuation?.totalProfit)} € ({pct(valuation?.totalProfitPercent)})</strong>
+            </div>
+          </div>
+        </div>
+        <div className="import-zone">
+          <label className="btn-import">
+            {importing ? "Importiere..." : "Trade Republic CSV Import"}
+            <input type="file" accept=".csv" onChange={handleImport} style={{ display: 'none' }} />
+          </label>
+        </div>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      {!valuation || valuation.holdings.length === 0 ? (
+        <div className="empty">Noch keine Bestände. Importiere eine CSV-Datei von Trade Republic.</div>
+      ) : (
+        <div className="portfolio-content">
+          <div className="portfolio-table-container">
+            <table className="portfolio-table">
+              <thead>
+                <tr>
+                  <th>Ticker</th>
+                  <th>Menge</th>
+                  <th>Ø Preis</th>
+                  <th>Aktueller Preis</th>
+                  <th>Wert</th>
+                  <th>G/V</th>
+                </tr>
+              </thead>
+              <tbody>
+                {valuation.holdings.map((h: any, i: number) => (
+                  <tr key={i}>
+                    <strong className="ticker">{h.ticker}</strong>
+                    <td>{h.quantity}</td>
+                    <td>{fmt(h.averagePrice)}</td>
+                    <td>{fmt(h.currentPrice)}</td>
+                    <td>{fmt(h.currentValue)} €</td>
+                    <td className={h.profit >= 0 ? 'up' : 'down'}>
+                      {fmt(h.profit)} € ({pct(h.profitPercent)})
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <PortfolioAnalytics
+            holdings={valuation.holdings}
+            sectorDistribution={valuation.sectorDistribution}
+            totalValue={valuation.totalValue}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function App() {
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [stocks, setStocks] = useState<Stock[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState<string>("");
+  const [selected, setSelected] = useState<{ symbol: string; name?: string } | null>(null);
+  const [view, setView] = useState<"watchlist" | "earnings" | "performance" | "compare" | "score" | "news" | "portfolio">("watchlist");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenParam = params.get('token');
+    if (tokenParam) {
+      localStorage.setItem('token', tokenParam);
+      setToken(tokenParam);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get<Stock[]>("/stocks");
+      setStocks(res.data);
+    } catch (err: any) {
+      setError("Failed to load stocks");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, []);
+  const filtered = search
+    ? stocks.filter(s => s.symbol.toUpperCase().includes(search.toUpperCase()) || s.name.toLowerCase().includes(search.toLowerCase()))
+    : stocks;
+  const trackedSymbols = new Set(stocks.map(s => s.symbol.toUpperCase()));
+  const handlePick = async (r: SearchResult) => {
+    const sym = r.symbol.toUpperCase();
+    setSearch("");
+    setSelected({ symbol: sym, name: r.name });
+    setView("watchlist");
+  };
+  const handleAddToWatchlist = async (r: { symbol: string; name: string }) => {
+    await createStock({ symbol: r.symbol, name: r.name }).catch(() => {});
+    await load();
+  };
+  const handleRemoveFromWatchlist = async (symbol: string) => {
+    await deleteStock(symbol).catch(() => {});
+    setSelected(null);
+    await load();
+  };
+  if (loading) return <div className="container">Lade...</div>;
+  if (error) return <div className="container error">Fehler: {error}</div>;
+  return (
+    <div className="app">
+      <header className="header">
+        <div className="brand">
+          <span className="logo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M3 17l5-6 4 3 6-8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M14 6h4v4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <div className="brand-text">
+            <h1>Buffet</h1>
+            <span className="tagline">Deine Aktien, live & auf einen Blick</span>
+          </div>
+        </div>
+        <SearchBox value={search} onChange={setSearch} trackedSymbols={trackedSymbols} onPick={handlePick} />
+      </header>
+        <nav className="main-nav">
+          {([
+            ["watchlist", "Watchlist"],
+            ["earnings", "Earnings"],
+            ["performance", "Performance"],
+            ["compare", "Vergleich"],
+            ["score", "Score"],
+            ["news", "News"],
+            ["portfolio", "Portfolio"],
+          ] as const).map(([k, label]) => (
+            <button key={k} className={view === k ? "active" : ""} onClick={() => setView(k)}>{label}</button>
+          ))}
+        </nav>
+        {token && (
+          <button className="btn-logout" onClick={handleLogout} style={{ position: 'absolute', right: '20px', top: '20px' }}>
+            Logout
+          </button>
+        )}
+        {!token && (
+          <button className="btn-google" onClick={handleGoogleLogin} style={{ position: 'absolute', right: '20px', top: '20px' }}>
+            Sign in with Google
+          </button>
+        )}
+      <section className="hero">
+        <div className="hero-text">
+          <h2>Dein Aktien-Dashboard</h2>
+          <p>Suche einfach nach Name oder Symbol — z. B. <strong>Apple</strong> statt AAPL. Öffne einen Treffer, um Details zu sehen.</p>
+        </div>
+        <div className="hero-stats">
+          <div className="hero-stat">
+            <strong>{stocks.length}</strong>
+            <span>beobachtete Aktien</span>
+          </div>
+          <div className="hero-stat">
+            <strong>{stocks.filter(s => s.lastSyncedAt).length}</strong>
+            <span>zuletzt aktualisiert</span>
+          </div>
+        </div>
+      </section>
+      {view === "watchlist" && (
+      <div className="layout">
+        <div className="list">
+          <div className="list-head">
+            <h3>Deine Watchlist</h3>
+            <span className="muted">{filtered.length} von {stocks.length}</span>
+          </div>
+          {filtered.length === 0 ? (
+            <div className="empty">
+              {search ? "Keine Treffer für „" + search + "\"." : "Noch keine Aktien. Suche oben nach einem Namen oder Symbol und füge sie zur Watchlist hinzu."}
+            </div>
+          ) : (
+            <div className="stock-list">
+              {filtered.map(s => (
+                <StockCard key={s.id} stock={s} active={s.symbol === selected?.symbol} onOpen={setSelected} />
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="detail">
+          {selected ? (
+            <StockDetail symbol={selected.symbol} name={selected.name} isTracked={trackedSymbols.has(selected.symbol)} onAdd={handleAddToWatchlist} onAdded={() => load()} onRemove={handleRemoveFromWatchlist} />
+          ) : (
+            <div className="placeholder">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M3 17l5-6 4 3 6-8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <p>Wähle einen Stock aus der Liste, um Details zu sehen.</p>
+            </div>
+          )}
+        </div>
+      </div>
+      )}
+      {view === "earnings" && <EarningsDashboard />}
+      {view === "performance" && <PerformanceAnalytics />}
+      {view === "compare" && <ComparisonWorkspace watchlist={stocks.map(s => ({ id: s.id, symbol: s.symbol, name: s.name }))} />}
+      {view === "score" && <FundamentalScore />}
+      {view === "news" && <NewsDashboard />}
+      {view === "portfolio" && token ? <PortfolioView /> : (
+        <div className="placeholder">
+          <p>Bitte melde dich mit Google an, um dein Portfolio zu verwalten.</p>
+          <button className="btn-google" onClick={() => window.location.href = '/api/auth/google'}>
+            Sign in with Google
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SearchBox({ value, onChange, trackedSymbols, onPick }: {
+  value: string;
+  onChange: (v: string) => void;
+  trackedSymbols: Set<string>;
+  onPick: (r: SearchResult) => void;
+}) {
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const q = value.trim();
+    if (q.length < 2) {
+      setResults([]);
+      setOpen(false);
+      setNotFound(false);
+      setBusy(false);
+      return;
+    }
+    setBusy(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await searchYahoo(q);
+        const list = r.filter((x: SearchResult) => x.symbol);
+        setResults(list);
+        setNotFound(list.length === 0);
+        setOpen(true);
+      } catch (err: any) {
+        setResults([]);
+        setNotFound(false);
+      } finally {
+        setBusy(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [value]);
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+  return (
+    <div className="searchbox" ref={ref}>
+      <svg className="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+        <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+      <input
+        type="text"
+        placeholder="Name oder Symbol suchen — z. B. Apple, SAP, TSLA"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onFocus={() => { if (results.length) setOpen(true); }}
+      />
+      {busy && <span className="spinner" />}
+      {open && (
+        <div className="search-dropdown">
+          {notFound && <div className="search-empty">Keine Treffer</div>}
+          {results.map(r => {
+            const tracked = trackedSymbols.has(r.symbol.toUpperCase());
+            return (
+              <div key={r.symbol} className="search-result" onClick={() => { setOpen(false); onPick(r); }}>
+                <div className="result-avatar" style={{ background: gradientFor(r.symbol) }}>{initials(r.name)}</div>
+                <div className="result-body">
+                  <strong>{r.symbol}</strong>
+                  <span>{r.name}</span>
+                  <span className="muted">{r.exchangeDisplay || r.exchange || r.typeDisplay || ""}</span>
+                </div>
+                <span className="result-badge">{tracked ? "Öffnen" : "Ansehen"}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+function StockCard({ stock, active, onOpen }: { stock: Stock; active: boolean; onOpen: (s: { symbol: string; name?: string }) => void }) {
+  return (
+    <div className={active ? "stock-card active" : "stock-card"} onClick={() => onOpen({ symbol: stock.symbol, name: stock.name })}>
+      <div className="stock-avatar" style={{ background: gradientFor(stock.symbol) }}>{initials(stock.name || stock.symbol)}</div>
+      <div className="stock-info">
+        <div className="stock-symbol">{stock.symbol}</div>
+        <div className="stock-name">{stock.name}</div>
+        {stock.sector && <span className="chip">{stock.sector}</span>}
+      </div>
+      <div className="stock-actions" onClick={e => e.stopPropagation()}>
+        <a className="btn-csv" href={exportCsvUrl(stock.symbol)} download title="CSV exportieren" onClick={e => e.stopPropagation()}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </a>
+      </div>
+    </div>
+  );
+}
+function StockDetail({ symbol, name, isTracked, onAdd, onAdded, onRemove }: {
+  symbol: string; name?: string; isTracked: boolean; onAdd: (r: { symbol: string; name: string }) => void; onAdded: () => void; onRemove: (symbol: string) => void;
+}) {
+  const [tab, setTab] = useState<"overview" | "fundamentals" | "news" | "calendar" | "indicators">("overview");
+  const [quote, setQuote] = useState<Quote>(null);
+  const [fund, setFund] = useState<FundamentalsData | null>(null);
+  const [news, setNews] = useState<NewsData | null>(null);
+  const [cal, setCal] = useState<CalendarData | null>(null);
+  const [indicators, setIndicators] = useState<IndicatorData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [q, f, n, c, ind] = await Promise.all([
+        fetchQuote(symbol).catch(() => null),
+        fetchFundamentals(symbol).catch(() => null),
+        fetchNews(symbol).catch(() => ({ all: [], company: [], geopolitics: [] })),
+        fetchCalendar(symbol).catch(() => ({ events: [] })),
+        fetchIndicators(symbol).catch(() => null),
+      ]);
+      setQuote(q);
+      setFund(f);
+      setNews(n);
+      setCal(c);
+      setIndicators((ind as any)?.indicators ?? ind);
+    } catch (err: any) {
+      setError(err?.message || "Laden fehlgeschlagen");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, [symbol]);
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshStock(symbol);
+      await load();
+    } finally { setRefreshing(false); }
+  };
+  return (
+    <div className="stock-detail">
+      <div className="detail-header">
+        <h2>{symbol}</h2>
+        <div className="actions">
+          {!isTracked && (
+            <button className="btn-add" onClick={() => { onAdd({ symbol, name: name || symbol }); onAdded(); }}>
+              Zur Watchlist hinzufügen
+            </button>
+          )}
+          {isTracked && (
+            <>
+              <button onClick={handleRefresh} disabled={refreshing}>
+                {refreshing ? "Aktualisiere..." : "Daten aktualisieren"}
+              </button>
+              <button className="btn-remove" onClick={() => onRemove(symbol)} title="Von der Watchlist entfernen">
+                Entfernen
+              </button>
+              <a className="btn-csv" href={exportCsvUrl(symbol)} download title="CSV exportieren">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </a>
+            </>
+          )}
+        </div>
+      </div>
+      {loading && !quote && <div className="muted">Lade Daten...</div>}
+      {error && <div className="error">{error}</div>}
+      {quote && (
+        <div className="quote-bar">
+          <div className="price">
+            {fmt(quote.price)} <span className="cur">{quote.currency}</span>
+          </div>
+          <div className={quote.change != null && quote.change < 0 ? "change down" : "change up"}>
+            {quote.change != null ? (quote.change >= 0 ? "+" : "") + fmt(quote.change) + " " + (quote.currency || "") : "-"}
+            {" "}
+            {quote.changePercent != null ? "(" + pct(quote.changePercent) + ")" : ""}
+          </div>
+          <div className="meta">
+            <span>Börse: {quote.exchangeName || "-"}</span>
+            <span>Status: {quote.marketState || "-"}</span>
+            <span>Stand: {dateShort(quote.timestamp)}</span>
+          </div>
+        </div>
+      )}
+      <div className="tabs">
+        {(["overview", "fundamentals", "news", "calendar", "indicators"] as const).map(t => (
+          <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
+            {t === "overview" ? "Übersicht" : t === "fundamentals" ? "Fundamentaldaten" : t === "news" ? "Nachrichten" : t === "calendar" ? "Termine" : "Indikatoren"}
+          </button>
+        ))}
+      </div>
+      {tab === "overview" && (
+        <>
+          <PriceChart symbol={symbol} />
+          {quote && (
+            <div className="grid">
+              <div className="card">
+                <h4>Tag</h4>
+                <div className="kv"><span>Hoch</span><strong>{fmt(quote.dayHigh)}</strong></div>
+                <div className="kv"><span>Tief</span><strong>{fmt(quote.dayLow)}</strong></div>
+                <div className="kv"><span>Volumen</span><strong>{big(quote.volume)}</strong></div>
+                <div className="kv"><span>Vortag</span><strong>{fmt(quote.previousClose)}</strong></div>
+              </div>
+              <div className="card">
+                <h4>52-Wochen</h4>
+                <div className="kv"><span>Hoch</span><strong>{fmt(quote.yearHigh)}</strong></div>
+                <div className="kv"><span>Tief</span><strong>{fmt(quote.yearLow)}</strong></div>
+              </div>
+              <div className="card">
+                <h4>Marktkapitalisierung</h4>
+                <div className="kv"><span>Market Cap</span><strong>{big(quote.marketCap)}</strong></div>
+              </div>
+              {fund && (
+                <div className="card">
+                  <h4>Bewertung</h4>
+                  <div className="kv"><span>KGV (PE)</span><strong>{fmt(fund.peRatio)}</strong></div>
+                  <div className="kv"><span>Forward PE</span><strong>{fmt(fund.forwardPe)}</strong></div>
+                  <div className="kv"><span>PEG</span><strong>{fmt(fund.pegRatio)}</strong></div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+      {tab === "fundamentals" && fund && (
+        <Fundamentals fund={fund} />
+      )}
+      {tab === "news" && news && (
+        <News news={news} />
+      )}
+      {tab === "calendar" && cal && (
+        <Calendar cal={cal} />
+      )}
+      {tab === "indicators" && indicators && (
+        <div className="grid">
+          <div className="card">
+            <h4>Durchschnittswerte</h4>
+            <div className="kv"><span>SMA 20</span><strong>{fmt(indicators.sma_20)}</strong></div>
+            <div className="kv"><span>SMA 50</span><strong>{fmt(indicators.sma_50)}</strong></div>
+            <div className="kv"><span>EMA 12</span><strong>{fmt(indicators.ema_12)}</strong></div>
+            <div className="kv"><span>EMA 26</span><strong>{fmt(indicators.ema_26)}</strong></div>
+          </div>
+          <div className="card">
+            <h4>Oszillatoren</h4>
+            <div className="kv"><span>RSI</span><strong>{fmt(indicators.rsi)}</strong></div>
+            <div className="kv"><span>MACD</span><strong>{fmt(indicators.macd)}</strong></div>
+            <div className="kv"><span>MACD Signal</span><strong>{fmt(indicators.macd_signal)}</strong></div>
+            <div className="kv"><span>MACD Hist</span><strong>{fmt(indicators.macd_hist)}</strong></div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+function NewsCard({ item }: { item: NewsItem }) {
+  return (
+    <a className="news-card" href={item.link} target="_blank" rel="noreferrer">
+      {item.thumbnail && <img src={item.thumbnail} alt="" />}
+      <div className="news-body">
+        <div className="news-title">{item.title}</div>
+        <div className="news-meta">
+          <span className={`tag tag-${item.type}`}>{item.type === "geopolitics" ? "Geopolitik" : "Unternehmen"}</span>
+          <span>{item.publisher}</span>
+          <span className="muted">{relTime(item.publishedAt)}</span>
+        </div>
+      </div>
+    </a>
+  );
+}
+function News({ news }: { news: NewsData }) {
+  if (!news) return <div>Loading news...</div>;
+  const { company, geopolitics } = news;
+  return (
+    <div className="news">
+      <h3>Geopolitische Nachrichten</h3>
+      {geopolitics.length === 0 ? <div className="muted">Keine</div> : (
+        <>
+          {geopolitics.map((item: any) => (
+            <NewsCard key={item.uuid} item={item} />
+          ))}
+        </>
+      )}
+      <h3>Unternehmensnachrichten</h3>
+      {company.length === 0 ? <div className="muted">Keine</div> : (
+        <>
+          {company.map((item: any) => (
+            <NewsCard key={item.uuid} item={item} />
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+function CalendarEventCard({ event }: { event: any }) {
+  const date = event.date ? new Date(event.date).toLocaleString() : "-";
+  return (
+    <div className="event">
+      <div className="event-type">{event.type}</div>
+      <div className="event-date">{date}</div>
+      {event.earningsAverage != null && (
+        <div className="event-extra">
+          EPS-Schätzung: {formatNumber(event.earningsAverage)} (low {formatNumber(event.earningsLow)} / high {formatNumber(event.earningsHigh)})
+        </div>
+      )}
+      {event.revenueAverage != null && (
+        <div className="event-extra">
+          Umsatz-Schätzung: {formatLarge(event.revenueAverage)}
+        </div>
+      )}
+      {event.description && <div className="event-extra">{event.description}</div>}
+      {event.isEstimate && <div className="event-tag">Schätzung</div>}
+    </div>
+  );
+}
+function Calendar({ cal }: { cal: CalendarData }) {
+  if (!cal) return <div>Loading calendar...</div>;
+  return (
+    <div className="calendar">
+      {cal.events.length === 0 ? <div className="muted">Keine Termine</div> : (
+        <>
+          {cal.events.map((event: any, index: number) => (
+            <CalendarEventCard key={index} event={event} />
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+function formatLarge(num: number | null | undefined): string {
+  if (num == null || !Number.isFinite(num)) return "-";
+  const abs = Math.abs(num);
+  if (abs >= 1e12) return (num / 1e12).toFixed(2) + "T";
+  if (abs >= 1e9) return (num / 1e9).toFixed(2) + "B";
+  if (abs >= 1e6) return (num / 1e6).toFixed(2) + "M";
+  if (abs >= 1e3) return (num / 1e3).toFixed(2) + "K";
+  return String(num);
+}
+function formatNumber(num: number | null | undefined): string {
+  if (num == null || !Number.isFinite(num)) return "-";
+  return num.toString();
+}
+export default App;
