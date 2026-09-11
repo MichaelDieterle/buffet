@@ -1,4 +1,6 @@
 const express = require('express');
+const validate = require('../middleware/validate');
+const schemas = require('../middleware/schemas');
 const router = express.Router();
 const { Stock, Fundamental, PriceHistory } = require('../models');
 const provider = require('../services/provider');
@@ -55,7 +57,7 @@ router.get('/scores', async (req, res) => {
 });
 
 // GET /api/analytics/compare?symbols=AAPL,MSFT - side-by-side metrics for comparison
-router.get('/compare', async (req, res) => {
+router.get('/compare', validate(schemas.analyticsCompare), async (req, res) => {
   try {
     const { symbols } = req.query;
     const list = String(symbols || '')
@@ -99,7 +101,7 @@ router.get('/compare', async (req, res) => {
 });
 
 // GET /api/analytics/news - aggregated news across the watchlist
-router.get('/news', async (req, res) => {
+router.get('/news', validate(schemas.analyticsNews), async (req, res) => {
   try {
     const { type, limit } = req.query;
     const list = await analytics.aggregateNews(
