@@ -96,7 +96,7 @@ app.use('/mcp', mcpRouter());
 // Start server
 const startServer = async () => {
   // Health check endpoint (before static middleware)
-  app.get('/health', async (req, res) => {
+  app.get('/api/health', async (req, res) => {
     try {
       const { sequelize } = require('./models');
       await sequelize.authenticate();
