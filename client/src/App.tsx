@@ -10,6 +10,8 @@ import api, {
   deleteStock,
   exportCsvUrl,
   fetchIndicators,
+  fetchPortfolio,
+  importPortfolio,
 } from "./api";
 import { Fundamentals } from "./components/Fundamentals";
 import { PriceChart } from "./components/PriceChart";
@@ -138,13 +140,107 @@ function initials(name: string) {
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return name.slice(0, 2).toUpperCase();
 }
+function PortfolioView() {
+  const [holdings, setHoldings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await fetchPortfolio();
+      setHoldings(data.holdings);
+    } catch (err: any) {
+      setError("Failed to load portfolio");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    setError(null);
+    try {
+      await importPortfolio(file);
+      await load();
+    } catch (err: any) {
+      setError("Import failed: " + (err.response?.data?.error || err.message));
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  if (loading) return <div className="muted">Lade Portfolio...</div>;
+
+  return (
+    <div className="portfolio-view">
+      <div className="portfolio-header">
+        <h3>Mein Portfolio</h3>
+        <div className="import-zone">
+          <label className="btn-import">
+            {importing ? "Importiere..." : "Trade Republic CSV Import"}
+            <input type="file" accept=".csv" onChange={handleImport} style={{ display: 'none' }} />
+          </label>
+        </div>
+      </div>
+      {error && <div className="error">{error}</div>}
+      {holdings.length === 0 ? (
+        <div className="empty">Noch keine Bestände. Importiere eine CSV-Datei von Trade Republic.</div>
+      ) : (
+        <div className="portfolio-grid">
+          <div className="portfolio-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ticker</th>
+                  <th>Menge</th>
+                  <th>Ø Preis</th>
+                  <th>Währung</th>
+                </tr>
+              </thead>
+              <tbody>
+                {holdings.map((h, i) => (
+                  <tr key={i}>
+                    <strong>{h.ticker}</strong>
+                    <td>{h.quantity}</td>
+                    <td>{h.averagePrice}</td>
+                    <td>{h.currency}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function App() {
+  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState<string>("");
   const [selected, setSelected] = useState<{ symbol: string; name?: string } | null>(null);
-  const [view, setView] = useState<"watchlist" | "earnings" | "performance" | "compare" | "score" | "news">("watchlist");
+  const [view, setView] = useState<"watchlist" | "earnings" | "performance" | "compare" | "score" | "news" | "portfolio">("watchlist");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenParam = params.get('token');
+    if (tokenParam) {
+      localStorage.setItem('token', tokenParam);
+      setToken(tokenParam);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
   const load = async () => {
     setLoading(true);
     try {
@@ -195,18 +291,29 @@ function App() {
         </div>
         <SearchBox value={search} onChange={setSearch} trackedSymbols={trackedSymbols} onPick={handlePick} />
       </header>
-      <nav className="main-nav">
-        {([
-          ["watchlist", "Watchlist"],
-          ["earnings", "Earnings"],
-          ["performance", "Performance"],
-          ["compare", "Vergleich"],
-          ["score", "Score"],
-          ["news", "News"],
-        ] as const).map(([k, label]) => (
-          <button key={k} className={view === k ? "active" : ""} onClick={() => setView(k)}>{label}</button>
-        ))}
-      </nav>
+        <nav className="main-nav">
+          {([
+            ["watchlist", "Watchlist"],
+            ["earnings", "Earnings"],
+            ["performance", "Performance"],
+            ["compare", "Vergleich"],
+            ["score", "Score"],
+            ["news", "News"],
+            ["portfolio", "Portfolio"],
+          ] as const).map(([k, label]) => (
+            <button key={k} className={view === k ? "active" : ""} onClick={() => setView(k)}>{label}</button>
+          ))}
+        </nav>
+        {token && (
+          <button className="btn-logout" onClick={handleLogout} style={{ position: 'absolute', right: '20px', top: '20px' }}>
+            Logout
+          </button>
+        )}
+        {!token && (
+          <button className="btn-google" onClick={handleGoogleLogin} style={{ position: 'absolute', right: '20px', top: '20px' }}>
+            Sign in with Google
+          </button>
+        )}
       <section className="hero">
         <div className="hero-text">
           <h2>Dein Aktien-Dashboard</h2>
@@ -261,6 +368,14 @@ function App() {
       {view === "compare" && <ComparisonWorkspace watchlist={stocks.map(s => ({ id: s.id, symbol: s.symbol, name: s.name }))} />}
       {view === "score" && <FundamentalScore />}
       {view === "news" && <NewsDashboard />}
+      {view === "portfolio" && token ? <PortfolioView /> : (
+        <div className="placeholder">
+          <p>Bitte melde dich mit Google an, um dein Portfolio zu verwalten.</p>
+          <button className="btn-google" onClick={() => window.location.href = '/api/auth/google'}>
+            Sign in with Google
+          </button>
+        </div>
+      )}
     </div>
   );
 }

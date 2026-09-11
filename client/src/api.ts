@@ -4,6 +4,14 @@ const api = axios.create({
   baseURL: '/api',
 });
 
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export async function fetchQuote(symbol: string) {
   return api.get(`/stocks/${symbol}/quote`).then(r => r.data);
 }
@@ -76,6 +84,19 @@ export async function removeComparisonStock(id: number, stockId: number) {
 }
 export async function deleteComparison(id: number) {
   return api.delete(`/comparisons/${id}`).then(r => r.data);
+}
+
+// ── Portfolios ────────────────────────────────────────────────────────────────
+export async function fetchPortfolio() {
+  return api.get('/portfolios').then(r => r.data);
+}
+
+export async function importPortfolio(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return api.post('/portfolios/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(r => r.data);
 }
 
 export default api;

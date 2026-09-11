@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 const validate = require('../middleware/validate');
 const { z } = require('zod');
+const passport = require('../config/passport');
 const router = express.Router();
 
 const authSchemas = {
@@ -62,5 +63,25 @@ router.post('/login', validate(authSchemas.login), async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+// GET /api/auth/google
+router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+
+// GET /api/auth/google/callback
+router.get('/google/callback',
+  passport.authenticate('google', { session: false }),
+  (req, res) => {
+    const user = req.user;
+    const token = jwt.sign(
+      { id: user.id, role: user.role },
+      process.env.JWT_SECRET || 'super-secret-key',
+      { expiresIn: '24h' }
+    );
+
+    // Redirect back to frontend with token in query param
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    res.redirect(`${frontendUrl}/auth/callback?token=${token}`);
+  }
+);
 
 module.exports = router;

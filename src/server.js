@@ -6,12 +6,14 @@ const path = require('path');
 const fs = require('fs');
 const { sequelize } = require('./models');
 const dotenv = require('dotenv');
+const passport = require('./config/passport');
 const stockRoutes = require('./routes/stocks');
 const comparisonRoutes = require('./routes/comparisons');
 const competitorRoutes = require('./routes/competitors');
 const exportRoutes = require('./routes/export');
 const analyticsRoutes = require('./routes/analytics');
 const authRoutes = require('./routes/auth');
+const portfolioRoutes = require('./routes/portfolios');
 const { mcpRouter } = require('./mcp/http');
 const refreshJob = require('./services/refreshJob');
 const errorHandler = require('./middleware/errorHandler');
@@ -34,6 +36,7 @@ app.use(helmet());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(passport.initialize());
 
 // Lazy DB initialization shared by all API requests. On serverless (Vercel) the
 // module is imported and the very first request can arrive before the async
@@ -80,6 +83,7 @@ app.use('/api', async (req, res, next) => {
 
 // API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/portfolios', portfolioRoutes);
 app.use('/api/stocks', stockRoutes);
 app.use('/api/stocks', competitorRoutes);
 app.use('/api/comparisons', comparisonRoutes);
