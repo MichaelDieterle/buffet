@@ -20,6 +20,7 @@ import PerformanceAnalytics from "./components/dashboards/PerformanceAnalytics";
 import ComparisonWorkspace from "./components/dashboards/ComparisonWorkspace";
 import FundamentalScore from "./components/dashboards/FundamentalScore";
 import NewsDashboard from "./components/dashboards/NewsDashboard";
+import { PortfolioAnalytics } from "./components/dashboards/PortfolioAnalytics";
 type Stock = { id: number; symbol: string; name: string; sector?: string; industry?: string; lastSyncedAt?: string; isTracked?: boolean };
 type SearchResult = { symbol: string; name: string; exchange: string; exchangeDisplay?: string; typeDisplay?: string };
 type Quote = {
@@ -141,24 +142,27 @@ function initials(name: string) {
   return name.slice(0, 2).toUpperCase();
 }
 function PortfolioView() {
-  const [holdings, setHoldings] = useState<any[]>([]);
+  const [valuation, setValuation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = async () => {
-    setLoading(true);
+  const loadValuation = async () => {
     try {
-      const data = await fetchPortfolio();
-      setHoldings(data.holdings);
+      const data = await api.get('/portfolios/valuation');
+      setValuation(data.data);
     } catch (err: any) {
-      setError("Failed to load portfolio");
+      setError("Failed to load portfolio valuation");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    loadValuation();
+    const interval = setInterval(loadValuation, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -168,7 +172,7 @@ function PortfolioView() {
     setError(null);
     try {
       await importPortfolio(file);
-      await load();
+      await loadValuation();
     } catch (err: any) {
       setError("Import failed: " + (err.response?.data?.error || err.message));
     } finally {
@@ -176,12 +180,24 @@ function PortfolioView() {
     }
   };
 
-  if (loading) return <div className="muted">Lade Portfolio...</div>;
+  if (loading && !valuation) return <div className="muted">Lade Portfolio-Daten...</div>;
 
   return (
     <div className="portfolio-view">
       <div className="portfolio-header">
-        <h3>Mein Portfolio</h3>
+        <div className="header-main">
+          <h3>Mein Portfolio</h3>
+          <div className="portfolio-totals">
+            <div className="total-box">
+              <span className="label">Gesamtwert</span>
+              <strong className="value">{fmt(valuation?.totalValue)} €</strong>
+            </div>
+            <div className={`total-box ${valuation?.totalProfit >= 0 ? 'up' : 'down'}`}>
+              <span className="label">Gewinn/Verlust</span>
+              <strong className="value">{fmt(valuation?.totalProfit)} € ({pct(valuation?.totalProfitPercent)})</strong>
+            </div>
+          </div>
+        </div>
         <div className="import-zone">
           <label className="btn-import">
             {importing ? "Importiere..." : "Trade Republic CSV Import"}
@@ -189,33 +205,46 @@ function PortfolioView() {
           </label>
         </div>
       </div>
+
       {error && <div className="error">{error}</div>}
-      {holdings.length === 0 ? (
+
+      {!valuation || valuation.holdings.length === 0 ? (
         <div className="empty">Noch keine Bestände. Importiere eine CSV-Datei von Trade Republic.</div>
       ) : (
-        <div className="portfolio-grid">
-          <div className="portfolio-table">
-            <table>
+        <div className="portfolio-content">
+          <div className="portfolio-table-container">
+            <table className="portfolio-table">
               <thead>
                 <tr>
                   <th>Ticker</th>
                   <th>Menge</th>
                   <th>Ø Preis</th>
-                  <th>Währung</th>
+                  <th>Aktueller Preis</th>
+                  <th>Wert</th>
+                  <th>G/V</th>
                 </tr>
               </thead>
               <tbody>
-                {holdings.map((h, i) => (
+                {valuation.holdings.map((h: any, i: number) => (
                   <tr key={i}>
-                    <strong>{h.ticker}</strong>
+                    <strong className="ticker">{h.ticker}</strong>
                     <td>{h.quantity}</td>
-                    <td>{h.averagePrice}</td>
-                    <td>{h.currency}</td>
+                    <td>{fmt(h.averagePrice)}</td>
+                    <td>{fmt(h.currentPrice)}</td>
+                    <td>{fmt(h.currentValue)} €</td>
+                    <td className={h.profit >= 0 ? 'up' : 'down'}>
+                      {fmt(h.profit)} € ({pct(h.profitPercent)})
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          <PortfolioAnalytics
+            holdings={valuation.holdings}
+            sectorDistribution={valuation.sectorDistribution}
+            totalValue={valuation.totalValue}
+          />
         </div>
       )}
     </div>

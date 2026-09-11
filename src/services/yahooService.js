@@ -346,10 +346,35 @@ async function searchSymbol(query) {
   }
 }
 
+async function fetchQuotes(symbols) {
+  if (!symbols || symbols.length === 0) return {};
+  try {
+    const results = await yahooFinance.quote(symbols);
+    const quotesMap = {};
+
+    const items = Array.isArray(results) ? results : [results];
+
+    for (const q of items) {
+      const symbol = q.symbol;
+      quotesMap[symbol] = {
+        price: safeNumber(q.regularMarketPrice),
+        currency: q.currency || 'USD',
+        change: safeNumber(q.regularMarketChange),
+        changePercent: safeNumber(q.regularMarketChangePercent),
+      };
+    }
+    return quotesMap;
+  } catch (err) {
+    console.error(`[yahoo] bulk quotes error:`, err.message);
+    return {};
+  }
+}
+
 function clearCache() { cache.flushAll(); }
 
 module.exports = {
   fetchQuote,
+  fetchQuotes,
   fetchFundamentals,
   fetchNews,
   fetchCalendar,
