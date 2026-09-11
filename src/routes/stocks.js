@@ -1,11 +1,64 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
+const { z } = require('zod');
+const validate = require('../middleware/validate');
 const router = express.Router();
 const { Stock, PriceHistory } = require('../models');
 const { Sequelize } = require('sequelize');
 const provider = require('../services/provider');
 const refresh = require('../services/refreshJob');
 const indicator = require('../services/indicator');
+
+const schemas = {
+  listStocks: z.object({
+    query: z.object({
+      sector: z.string().optional(),
+      limit: z.coerce.number().int().min(1).max(500).optional(),
+      offset: z.coerce.number().int().min(0).optional(),
+    }),
+  }),
+  searchStocks: z.object({
+    params: z.object({
+      query: z.string().min(1),
+    }),
+  }),
+  createStock: z.object({
+    body: z.object({
+      symbol: z.string().min(1),
+      name: z.string().min(1),
+      sector: z.string().optional(),
+      industry: z.string().optional(),
+      currency: z.string().optional(),
+      marketCap: z.union([z.string(), z.number()]).optional(),
+      fetchOnCreate: z.coerce.boolean().optional(),
+    }),
+  }),
+  stockSymbol: z.object({
+    params: z.object({
+      symbol: z.string().min(1),
+    }),
+  }),
+  history: z.object({
+    params: z.object({
+      symbol: z.string().min(1),
+    }),
+    query: z.object({
+      start: z.string().optional(),
+      end: z.string().optional(),
+      limit: z.coerce.number().int().min(1).max(500).optional(),
+      days: z.coerce.number().int().min(1).optional(),
+    }),
+  }),
+  yahooHistory: z.object({
+    params: z.object({
+      symbol: z.string().min(1),
+    }),
+    query: z.object({
+      range: z.string().optional(),
+      interval: z.string().optional(),
+    }),
+  }),
+};
 
 // Rate limiters
 const yahooLimiter = rateLimit({
@@ -46,7 +99,7 @@ router.post('/_admin/refresh', requireAdminKey, async (req, res) => {
 // ── PUBLIC ROUTES ──────────────────────────────────────────────────────────
 
 // GET all stocks with optional filters
-router.get('/', async (req, res) => {
+router.get('/', validate(schemas.listStocks), async (req, res) => {
   try {
     const { sector, limit = 100, offset = 0 } = req.query;
     const where = {};
@@ -67,7 +120,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET search via provider
-router.get('/search/:query', searchLimiter, async (req, res) => {
+router.get('/search/:query', searchLimiter, validate(schemas.searchStocks), async (req, res) => {
   try {
     const results = await provider.searchSymbol(req.params.query);
     res.json(results);
@@ -78,7 +131,7 @@ router.get('/search/:query', searchLimiter, async (req, res) => {
 });
 
 // POST create a new stock
-router.post('/', async (req, res) => {
+router.post('/', validate(schemas.createStock), async (req, res) => {
   try {
     const { symbol, name, sector, industry, currency, marketCap, fetchOnCreate = true } = req.body;
     if (!symbol || !name) return res.status(400).json({ error: 'symbol and name are required' });
@@ -101,7 +154,7 @@ router.post('/', async (req, res) => {
 });
 
 // GET stock by symbol
-router.get('/:symbol', async (req, res) => {
+router.get('/:symbol', validate(schemas.stockSymbol), async (req, res) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });
@@ -116,7 +169,7 @@ router.get('/:symbol', async (req, res) => {
 // Falls back to the live provider (Yahoo/Alpha Vantage/Stooq) when the symbol
 // is not tracked in the DB, no price history has been stored yet, or the DB is
 // temporarily unavailable.
-router.get('/:symbol/history', async (req, res) => {
+router.get('/:symbol/history', validate(schemas.history), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const { start, end, limit = 100, days } = req.query;
@@ -160,7 +213,7 @@ router.get('/:symbol/history', async (req, res) => {
 });
 
 // GET live quote
-router.get('/:symbol/quote', yahooLimiter, async (req, res) => {
+router.get('/:symbol/quote', yahooLimiter, validate(schemas.stockSymbol), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await provider.fetchQuote(symbol);
@@ -173,7 +226,7 @@ router.get('/:symbol/quote', yahooLimiter, async (req, res) => {
 });
 
 // GET fundamentals
-router.get('/:symbol/fundamentals', yahooLimiter, async (req, res) => {
+router.get('/:symbol/fundamentals', yahooLimiter, validate(schemas.stockSymbol), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await provider.fetchFundamentals(symbol);
@@ -186,7 +239,7 @@ router.get('/:symbol/fundamentals', yahooLimiter, async (req, res) => {
 });
 
 // GET news
-router.get('/:symbol/news', yahooLimiter, async (req, res) => {
+router.get('/:symbol/news', yahooLimiter, validate(schemas.stockSymbol), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await provider.fetchNews(symbol);
@@ -198,7 +251,7 @@ router.get('/:symbol/news', yahooLimiter, async (req, res) => {
 });
 
 // GET calendar events
-router.get('/:symbol/calendar', yahooLimiter, async (req, res) => {
+router.get('/:symbol/calendar', yahooLimiter, validate(schemas.stockSymbol), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await provider.fetchCalendar(symbol);
@@ -210,7 +263,7 @@ router.get('/:symbol/calendar', yahooLimiter, async (req, res) => {
 });
 
 // GET yahoo history (no DB write)
-router.get('/:symbol/yahoo-history', yahooLimiter, async (req, res) => {
+router.get('/:symbol/yahoo-history', yahooLimiter, validate(schemas.yahooHistory), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const { range = '6mo', interval = '1d' } = req.query;
@@ -223,7 +276,7 @@ router.get('/:symbol/yahoo-history', yahooLimiter, async (req, res) => {
 });
 
 // GET technical indicators
-router.get('/:symbol/indicators', yahooLimiter, async (req, res) => {
+router.get('/:symbol/indicators', yahooLimiter, validate(schemas.stockSymbol), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const stock = await Stock.findOne({ where: { symbol } });
@@ -261,7 +314,7 @@ router.get('/:symbol/indicators', yahooLimiter, async (req, res) => {
 });
 
 // POST trigger a manual refresh for one stock
-router.post('/:symbol/refresh', async (req, res) => {
+router.post('/:symbol/refresh', validate(schemas.stockSymbol), async (req, res) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });
@@ -274,7 +327,7 @@ router.post('/:symbol/refresh', async (req, res) => {
 });
 
 // DELETE remove a stock from the watchlist
-router.delete('/:symbol', async (req, res) => {
+router.delete('/:symbol', validate(schemas.stockSymbol), async (req, res) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });

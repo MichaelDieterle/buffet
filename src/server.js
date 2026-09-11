@@ -10,8 +10,10 @@ const stockRoutes = require('./routes/stocks');
 const comparisonRoutes = require('./routes/comparisons');
 const competitorRoutes = require('./routes/competitors');
 const exportRoutes = require('./routes/export');
+const analyticsRoutes = require('./routes/analytics');
 const { mcpRouter } = require('./mcp/http');
 const refreshJob = require('./services/refreshJob');
+const errorHandler = require('./middleware/errorHandler');
 
 dotenv.config();
 
@@ -79,6 +81,7 @@ app.use('/api', async (req, res, next) => {
 app.use('/api/stocks', stockRoutes);
 app.use('/api/stocks', competitorRoutes);
 app.use('/api/comparisons', comparisonRoutes);
+app.use('/api/analytics', analyticsRoutes);
 app.use('/api/stocks', exportRoutes);
 
 // MCP endpoint for Claude custom connectors (remote MCP, read-only)
@@ -126,6 +129,8 @@ const startServer = async () => {
     });
   }
 };
+
+app.use(errorHandler);
 
 startServer();
 

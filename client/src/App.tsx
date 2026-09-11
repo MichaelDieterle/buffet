@@ -13,6 +13,11 @@ import api, {
 } from "./api";
 import { Fundamentals } from "./components/Fundamentals";
 import { PriceChart } from "./components/PriceChart";
+import EarningsDashboard from "./components/dashboards/EarningsDashboard";
+import PerformanceAnalytics from "./components/dashboards/PerformanceAnalytics";
+import ComparisonWorkspace from "./components/dashboards/ComparisonWorkspace";
+import FundamentalScore from "./components/dashboards/FundamentalScore";
+import NewsDashboard from "./components/dashboards/NewsDashboard";
 type Stock = { id: number; symbol: string; name: string; sector?: string; industry?: string; lastSyncedAt?: string; isTracked?: boolean };
 type SearchResult = { symbol: string; name: string; exchange: string; exchangeDisplay?: string; typeDisplay?: string };
 type Quote = {
@@ -139,6 +144,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState<string>("");
   const [selected, setSelected] = useState<{ symbol: string; name?: string } | null>(null);
+  const [view, setView] = useState<"watchlist" | "earnings" | "performance" | "compare" | "score" | "news">("watchlist");
   const load = async () => {
     setLoading(true);
     try {
@@ -159,6 +165,7 @@ function App() {
     const sym = r.symbol.toUpperCase();
     setSearch("");
     setSelected({ symbol: sym, name: r.name });
+    setView("watchlist");
   };
   const handleAddToWatchlist = async (r: { symbol: string; name: string }) => {
     await createStock({ symbol: r.symbol, name: r.name }).catch(() => {});
@@ -188,6 +195,18 @@ function App() {
         </div>
         <SearchBox value={search} onChange={setSearch} trackedSymbols={trackedSymbols} onPick={handlePick} />
       </header>
+      <nav className="main-nav">
+        {([
+          ["watchlist", "Watchlist"],
+          ["earnings", "Earnings"],
+          ["performance", "Performance"],
+          ["compare", "Vergleich"],
+          ["score", "Score"],
+          ["news", "News"],
+        ] as const).map(([k, label]) => (
+          <button key={k} className={view === k ? "active" : ""} onClick={() => setView(k)}>{label}</button>
+        ))}
+      </nav>
       <section className="hero">
         <div className="hero-text">
           <h2>Dein Aktien-Dashboard</h2>
@@ -204,6 +223,7 @@ function App() {
           </div>
         </div>
       </section>
+      {view === "watchlist" && (
       <div className="layout">
         <div className="list">
           <div className="list-head">
@@ -235,6 +255,12 @@ function App() {
           )}
         </div>
       </div>
+      )}
+      {view === "earnings" && <EarningsDashboard />}
+      {view === "performance" && <PerformanceAnalytics />}
+      {view === "compare" && <ComparisonWorkspace watchlist={stocks.map(s => ({ id: s.id, symbol: s.symbol, name: s.name }))} />}
+      {view === "score" && <FundamentalScore />}
+      {view === "news" && <NewsDashboard />}
     </div>
   );
 }
