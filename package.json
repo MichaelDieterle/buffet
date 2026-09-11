@@ -17,11 +17,13 @@
     "type": "commonjs",
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.30.0",
+        "bcryptjs": "^3.0.3",
         "cors": "^2.8.6",
         "dotenv": "^17.4.2",
         "express": "^5.2.1",
         "express-rate-limit": "^7.5.0",
         "helmet": "^8.2.0",
+        "jsonwebtoken": "^9.0.3",
         "morgan": "^1.11.0",
         "node-cache": "^5.1.2",
         "node-cron": "^4.6.0",

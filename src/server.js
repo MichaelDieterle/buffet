@@ -11,6 +11,7 @@ const comparisonRoutes = require('./routes/comparisons');
 const competitorRoutes = require('./routes/competitors');
 const exportRoutes = require('./routes/export');
 const analyticsRoutes = require('./routes/analytics');
+const authRoutes = require('./routes/auth');
 const { mcpRouter } = require('./mcp/http');
 const refreshJob = require('./services/refreshJob');
 const errorHandler = require('./middleware/errorHandler');
@@ -78,6 +79,7 @@ app.use('/api', async (req, res, next) => {
 });
 
 // API routes
+app.use('/api/auth', authRoutes);
 app.use('/api/stocks', stockRoutes);
 app.use('/api/stocks', competitorRoutes);
 app.use('/api/comparisons', comparisonRoutes);

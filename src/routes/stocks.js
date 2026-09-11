@@ -2,14 +2,13 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const validate = require('../middleware/validate');
 const schemas = require('../middleware/schemas');
+const { authenticate, isAdmin } = require('../middleware/auth');
 const router = express.Router();
 const { Stock, PriceHistory } = require('../models');
 const { Sequelize } = require('sequelize');
 const provider = require('../services/provider');
 const refresh = require('../services/refreshJob');
 const indicator = require('../services/indicator');
-
-// Rate limiters
 
 // Rate limiters
 const yahooLimiter = rateLimit({
@@ -26,23 +25,14 @@ const searchLimiter = rateLimit({
   message: { error: 'Too many search requests, please try again later.' },
 });
 
-// Admin key middleware
-function requireAdminKey(req, res, next) {
-  const key = req.headers['x-admin-key'];
-  if (process.env.ADMIN_KEY && key !== process.env.ADMIN_KEY) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  next();
-}
-
 // ── ADMIN ROUTES (must be before /:symbol to avoid shadowing) ─────────────
 // GET refresh job status
-router.get('/_admin/refresh-status', requireAdminKey, async (req, res) => {
+router.get('/_admin/refresh-status', authenticate, isAdmin, async (req, res) => {
   res.json(refresh.getStatus());
 });
 
 // POST trigger a global refresh
-router.post('/_admin/refresh', requireAdminKey, async (req, res) => {
+router.post('/_admin/refresh', authenticate, isAdmin, async (req, res) => {
   const result = await refresh.refreshAll();
   res.json(result);
 });
@@ -82,7 +72,7 @@ router.get('/search/:query', searchLimiter, validate(schemas.searchStocks), asyn
 });
 
 // POST create a new stock
-router.post('/', validate(schemas.createStock), async (req, res) => {
+router.post('/', authenticate, validate(schemas.createStock), async (req, res) => {
   try {
     const { symbol, name, sector, industry, currency, marketCap, fetchOnCreate = true } = req.body;
     if (!symbol || !name) return res.status(400).json({ error: 'symbol and name are required' });
@@ -265,7 +255,7 @@ router.get('/:symbol/indicators', yahooLimiter, validate(schemas.stockSymbol), a
 });
 
 // POST trigger a manual refresh for one stock
-router.post('/:symbol/refresh', validate(schemas.stockSymbol), async (req, res) => {
+router.post('/:symbol/refresh', authenticate, validate(schemas.stockSymbol), async (req, res) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });
@@ -278,7 +268,7 @@ router.post('/:symbol/refresh', validate(schemas.stockSymbol), async (req, res) 
 });
 
 // DELETE remove a stock from the watchlist
-router.delete('/:symbol', validate(schemas.stockSymbol), async (req, res) => {
+router.delete('/:symbol', authenticate, validate(schemas.stockSymbol), async (req, res) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
     if (!stock) return res.status(404).json({ error: 'Stock not found' });
