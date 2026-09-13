@@ -6,8 +6,6 @@ export async function fetchQuote(symbol: string) {
   try {
     return await api.get(`/stocks/${symbol}/quote`).then(r => r.data);
   } catch (error: any) {
-    // Some exchanges occasionally return no quote even though historical prices
-    // are available. Use the newest history point as a resilient display fallback.
     try {
       const rows = await fetchHistory(symbol, 7);
       const latest = Array.isArray(rows) ? [...rows].sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)))[0] : null;
@@ -25,19 +23,10 @@ export async function createStock(payload: { symbol: string; name: string; secto
 export async function deleteStock(symbol: string) { return api.delete(`/stocks/${symbol}`).then(r => r.data); }
 export function exportCsvUrl(symbol: string) { return `/api/stocks/${symbol}/export.csv`; }
 export async function fetchIndicators(symbol: string) { return api.get(`/stocks/${symbol}/indicators`).then(r => r.data); }
-export async function fetchHistory(symbol: string, days = 90) { return api.get(`/stocks/${symbol}/history`, { params: { days } }).then(r => r.data); }
-export async function fetchEarnings() { return api.get('/analytics/earnings').then(r => r.data); }
-export async function fetchPerformance() { return api.get('/analytics/performance').then(r => r.data); }
-export async function fetchScores() { return api.get('/analytics/scores').then(r => r.data); }
-export async function fetchNewsFeed(type?: string) { return api.get('/analytics/news', { params: type ? { type } : {} }).then(r => r.data); }
-export async function fetchCompare(symbols: string[]) { return api.get('/analytics/compare', { params: { symbols: symbols.join(',') } }).then(r => r.data); }
-export async function listComparisons() { return api.get('/comparisons').then(r => r.data); }
-export async function createComparison(payload: { name: string; description?: string }) { return api.post('/comparisons', payload).then(r => r.data); }
-export async function getComparison(id: number) { return api.get(`/comparisons/${id}`).then(r => r.data); }
-export async function updateComparison(id: number, payload: { name?: string; description?: string }) { return api.patch(`/comparisons/${id}`, payload).then(r => r.data); }
-export async function addComparisonStock(id: number, stockId: number) { return api.post(`/comparisons/${id}/stocks`, { stockId }).then(r => r.data); }
-export async function removeComparisonStock(id: number, stockId: number) { return api.delete(`/comparisons/${id}/stocks/${stockId}`).then(r => r.data); }
-export async function deleteComparison(id: number) { return api.delete(`/comparisons/${id}`).then(r => r.data); }
-export async function fetchPortfolio() { return api.get('/portfolios').then(r => r.data); }
-export async function importPortfolio(file: File) { const formData = new FormData(); formData.append('file', file); return api.post('/portfolios/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data); }
+export async function importPortfolio(file: File) {
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+  // Let the browser set the multipart boundary. Manually setting Content-Type can cause mobile network errors.
+  return api.post('/portfolios/import', formData).then(r => r.data);
+}
 export default api;
