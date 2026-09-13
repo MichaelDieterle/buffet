@@ -1,6 +1,12 @@
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 
+function getJwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error('JWT_SECRET is not configured');
+  return secret;
+}
+
 /**
  * Middleware to authenticate requests using a JWT.
  */
@@ -12,7 +18,7 @@ const authenticate = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super-secret-key');
+    const decoded = jwt.verify(token, getJwtSecret());
 
     const user = await User.findByPk(decoded.id);
     if (!user) {
@@ -22,6 +28,10 @@ const authenticate = async (req, res, next) => {
     req.user = user;
     next();
   } catch (err) {
+    if (err.message === 'JWT_SECRET is not configured') {
+      console.error('[auth] JWT_SECRET is not configured');
+      return res.status(503).json({ error: 'Authentication service is not configured' });
+    }
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 };
