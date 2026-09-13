@@ -28,35 +28,56 @@ jobs:
           p = Path('client/src/App.tsx')
           s = p.read_text()
 
-          replacements = [
-              (r"\s*const \[token, setToken\] = useState<string \| null>\(localStorage\.getItem\('token'\)\);", ""),
-              (r"\s*useEffect\(\(\) => \{ const params = new URLSearchParams\(window\.location\.search\); const tokenParam = params\.get\('token'\); if \(tokenParam\) \{ localStorage\.setItem\('token', tokenParam\); setToken\(tokenParam\); window\.history\.replaceState\(\{\}, document\.title, window\.location\.pathname\); \} \}, \[\]\);", ""),
-              (r"\s*const handleLogout = \(\) => \{ localStorage\.removeItem\('token'\); setToken\(null\); setView\(\"watchlist\"\); \};", ""),
-              (r"\s*const handleGoogleLogin = \(\) => \{ window\.location\.href = '/api/auth/google'; \};", ""),
-              (r"\s*\{token \? <button className=\"btn-logout\".*?</button> : <button className=\"btn-google\".*?</button>\}", ""),
-              (r"\{view === \"portfolio\" && token \? <PortfolioView /> : \(\s*<div className=\"placeholder\">.*?</div>\s*\)\}", "{view === \"portfolio\" && <PortfolioView />}")
+          exact = [
+              "const handleLogout = () => { localStorage.removeItem('token'); setToken(null); setView(\"watchlist\"); };",
+              "const handleGoogleLogin = () => { window.location.href = '/api/auth/google'; };",
           ]
+          for text in exact:
+              s = s.replace(text, '')
 
-          for pattern, repl in replacements:
-              ns, n = re.subn(pattern, repl, s, flags=re.S)
-              if n == 0:
-                  if 'token' in pattern or 'portfolio' in pattern:
-                      print(f'WARNING: pattern did not match: {pattern}')
-              s = ns
+          s = re.sub(r"\s*const \[token, setToken\] = useState<string \| null>\(localStorage\.getItem\('token'\)\);", '', s)
+          s = re.sub(r"\s*useEffect\(\(\) => \{ const params = new URLSearchParams\(window\.location\.search\);.*?window\.history\.replaceState\(\{\}, document\.title, window\.location\.pathname\); \} \}, \[\]\);", '', s, flags=re.S)
+          s = re.sub(r"<button[^>]*className=\"btn-(?:google|logout)\"[^>]*>.*?</button>", '', s, flags=re.S)
 
-          leftovers = [
-              "localStorage.getItem('token')",
-              "localStorage.setItem('token'",
-              "localStorage.removeItem('token'",
-              "setToken(",
-              "handleGoogleLogin",
-              "/api/auth/google",
-              "Sign in with Google",
-              "btn-logout",
+          start = s.find('{view === "portfolio" &&')
+          if start != -1:
+              depth = 0
+              quote = None
+              escaped = False
+              end = None
+              for i in range(start, len(s)):
+                  ch = s[i]
+                  if quote:
+                      if escaped:
+                          escaped = False
+                      elif ch == '\\\\':
+                          escaped = True
+                      elif ch == quote:
+                          quote = None
+                      continue
+                  if ch in '\"\'`':
+                      quote = ch
+                  elif ch == '{':
+                      depth += 1
+                  elif ch == '}':
+                      depth -= 1
+                      if depth == 0:
+                          end = i + 1
+                          break
+              if end is None:
+                  raise SystemExit('Could not parse portfolio JSX expression')
+              s = s[:start] + '{view === "portfolio" && <PortfolioView />}' + s[end:]
+
+          forbidden = [
+              "localStorage.getItem('token')", "localStorage.setItem('token'", "localStorage.removeItem('token'",
+              'setToken(', 'handleGoogleLogin', 'handleLogout', '/api/auth/google', 'Sign in with Google',
+              'btn-google', 'btn-logout'
           ]
-          bad = [x for x in leftovers if x in s]
+          bad = [x for x in forbidden if x in s]
           if bad:
               raise SystemExit('Frontend auth remnants remain: ' + ', '.join(bad))
+          if re.search(r'\btoken\b', s):
+              raise SystemExit('Frontend auth token identifier remains')
 
           p.write_text(s)
           PY
