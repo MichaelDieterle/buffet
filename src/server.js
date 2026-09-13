@@ -86,6 +86,10 @@ const startServer = async () => {
     const indexHtml = path.join(clientDistPath, 'index.html');
     if (fs.existsSync(indexHtml)) {
       app.use(express.static(clientDistPath));
+      app.use((req, res, next) => {
+        if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
+        next();
+      });
       app.use((req, res) => res.sendFile(indexHtml));
     } else {
       app.use((req, res) => {
