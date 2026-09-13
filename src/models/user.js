@@ -11,21 +11,11 @@ module.exports = (sequelize, DataTypes) => {
         notEmpty: true,
       },
     },
-    googleId: {
-      type: DataTypes.STRING,
-      allowNull: true,
-      unique: true,
-    },
     password: {
       type: DataTypes.STRING,
-      allowNull: true,
+      allowNull: false,
       validate: {
-        // Password is only required for non-OAuth users
-        isPasswordValid(value) {
-          if (!value && !this.googleId) {
-            throw new Error('Password is required for accounts without Google authentication');
-          }
-        },
+        len: [6, 128],
       },
     },
     role: {
@@ -34,22 +24,18 @@ module.exports = (sequelize, DataTypes) => {
     },
   });
 
-  // Hash password before saving
   User.beforeCreate(async (user) => {
-    if (user.password) {
-      const salt = await bcrypt.genSalt(10);
-      user.password = await bcrypt.hash(user.password, salt);
-    }
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(user.password, salt);
   });
 
   User.beforeUpdate(async (user) => {
-    if (user.changed('password') && user.password) {
+    if (user.changed('password')) {
       const salt = await bcrypt.genSalt(10);
       user.password = await bcrypt.hash(user.password, salt);
     }
   });
 
-  // Helper method to verify password
   User.prototype.verifyPassword = async function(password) {
     return bcrypt.compare(password, this.password);
   };
