@@ -184,3 +184,5 @@ export default function PerformanceAnalytics() {
     </div>
   );
 }
+
+// Vercel build verification marker.
