@@ -1,5 +1,4 @@
 const { DataTypes } = require('sequelize');
-const bcrypt = require('bcryptjs');
 
 module.exports = (sequelize, DataTypes) => {
   const User = sequelize.define('User', {
@@ -7,16 +6,12 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: false,
       unique: true,
-      validate: {
-        notEmpty: true,
-      },
+      validate: { notEmpty: true },
     },
     password: {
       type: DataTypes.STRING,
       allowNull: false,
-      validate: {
-        len: [6, 128],
-      },
+      validate: { len: [6, 128] },
     },
     role: {
       type: DataTypes.ENUM('user', 'admin'),
@@ -24,22 +19,9 @@ module.exports = (sequelize, DataTypes) => {
     },
   });
 
-  User.beforeCreate(async (user) => {
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(user.password, salt);
-  });
-
-  User.beforeUpdate(async (user) => {
-    if (user.changed('password')) {
-      const salt = await bcrypt.genSalt(10);
-      user.password = await bcrypt.hash(user.password, salt);
-    }
-  });
-
-  User.prototype.verifyPassword = async function(password) {
-    return bcrypt.compare(password, this.password);
-  };
-
+  // Legacy user records are retained for non-destructive database compatibility.
+  // Application authentication has been removed, so password hashing/verification
+  // hooks are intentionally no longer part of the runtime model.
   User.associate = (models) => {
     User.hasOne(models.Portfolio, { foreignKey: 'userId', as: 'portfolio' });
   };
