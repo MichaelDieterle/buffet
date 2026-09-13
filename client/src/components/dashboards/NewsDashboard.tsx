@@ -1,1 +1,115 @@
-import { useEffect, useState } from "react";import { fetchNewsFeed } from "../../api";type FeedItem = {  id: number;  title: string;  publisher: string;  link: string;  publishedAt: string | null;  type: "company" | "geopolitics";  thumbnail: string | null;  stock: { symbol: string; name: string } | null;};function relTime(s: string | null) {  if (!s) return "-";  const d = new Date(s).getTime();  const diff = Date.now() - d;  const m = Math.floor(diff / 60000);  if (m < 1) return "gerade eben";  if (m < 60) return m + " min";  const h = Math.floor(m / 60);  if (h < 24) return h + " h";  const t = Math.floor(h / 24);  return t + " d";}export default function NewsDashboard() {  const [rows, setRows] = useState<FeedItem[]>([]);  const [loading, setLoading] = useState(true);  const [error, setError] = useState<string | null>(null);  const [filter, setFilter] = useState<"all" | "company" | "geopolitics">("all");  const [symbols, setSymbols] = useState<string[]>([]);  const [activeSymbol, setActiveSymbol] = useState<string | null>(null);  useEffect(() => {    let cancelled = false;    setLoading(true);    fetchNewsFeed(filter === "all" ? undefined : filter)      .then((data: FeedItem[]) => {        if (cancelled) return;        setRows(data);        const syms = [...new Set(data.map(x => x.stock?.symbol).filter(Boolean))].sort() as string[];        setSymbols(prev => (prev.length === 0 ? syms : prev));      })      .catch((e: any) => { if (!cancelled) setError(e?.message || "Laden fehlgeschlagen"); })      .finally(() => { if (!cancelled) setLoading(false); });    return () => { cancelled = true; };  }, [filter]);  const filtered = activeSymbol ? rows.filter(r => r.stock?.symbol === activeSymbol) : rows;  const companyCount = rows.filter(r => r.type === "company").length;  const geoCount = rows.filter(r => r.type === "geopolitics").length;  if (loading) return <div className="dash-loading">Lade News-Dashboard...</div>;  if (error) return <div className="dash-error">Fehler: {error}</div>;  return (    <div className="dash">      <div className="dash-head">        <div>          <h3>News Dashboard</h3>          <p className="muted">{rows.length} Nachrichten aus deiner Watchlist</p>        </div>        <div className="dash-filters">          <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>Alle ({rows.length})</button>          <button className={filter === "company" ? "active" : ""} onClick={() => setFilter("company")}>Unternehmen ({companyCount})</button>          <button className={filter === "geopolitics" ? "active" : ""} onClick={() => setFilter("geopolitics")}>Geopolitik ({geoCount})</button>        </div>      </div>      {symbols.length > 0 && (        <div className="compare-add">          <span className="muted">Filtern:</span>          <button className={activeSymbol == null ? "chip-btn active" : "chip-btn"} onClick={() => setActiveSymbol(null)}>Alle</button>          {symbols.map(s => (            <button key={s} className={activeSymbol === s ? "chip-btn active" : "chip-btn"} onClick={() => setActiveSymbol(activeSymbol === s ? null : s)}>{s}</button>          ))}        </div>      )}      {filtered.length === 0 ? (        <div className="empty">Keine Nachrichten gefunden. Öffne eine Aktie und klicke auf „Daten aktualisieren", um News zu sammeln.</div>      ) : (        <div className="news-feed">          {filtered.map(r => (            <a className="news-card" href={r.link} target="_blank" rel="noreferrer" key={r.id}>              {r.thumbnail && <img src={r.thumbnail} alt="" />}              <div className="news-body">                <div className="news-title">{r.title}</div>                <div className="news-meta">                  {r.stock && <span className={`tag tag-stock`}>{r.stock.symbol}</span>}                  <span className={`tag tag-${r.type}`}>{r.type === "geopolitics" ? "Geopolitik" : "Unternehmen"}</span>                  <span>{r.publisher}</span>                  <span className="muted">{relTime(r.publishedAt)}</span>                </div>              </div>            </a>          ))}        </div>      )}    </div>  );}
+import { useEffect, useState } from "react";
+import { fetchNewsFeed } from "../../api";
+
+type FeedItem = {
+  id: number;
+  title: string;
+  publisher: string;
+  link: string;
+  publishedAt: string | null;
+  type: "company" | "geopolitics";
+  thumbnail: string | null;
+  stock: { symbol: string; name: string } | null;
+};
+
+function relTime(s: string | null) {
+  if (!s) return "-";
+  const d = new Date(s).getTime();
+  if (!Number.isFinite(d)) return "-";
+  const diff = Math.max(0, Date.now() - d);
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "gerade eben";
+  if (m < 60) return m + " min";
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + " h";
+  return Math.floor(h / 24) + " d";
+}
+
+export default function NewsDashboard() {
+  const [rows, setRows] = useState<FeedItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"all" | "company" | "geopolitics">("all");
+  const [symbols, setSymbols] = useState<string[]>([]);
+  const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setActiveSymbol(null);
+
+    fetchNewsFeed(filter === "all" ? undefined : filter)
+      .then((data: FeedItem[]) => {
+        if (cancelled) return;
+        const nextRows = Array.isArray(data) ? data : [];
+        setRows(nextRows);
+        const syms = [...new Set(nextRows.map(x => x.stock?.symbol).filter(Boolean))].sort() as string[];
+        setSymbols(syms);
+      })
+      .catch((e: any) => {
+        if (!cancelled) {
+          setRows([]);
+          setSymbols([]);
+          setError(e?.response?.data?.error || e?.message || "Laden fehlgeschlagen");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [filter]);
+
+  const filtered = activeSymbol ? rows.filter(r => r.stock?.symbol === activeSymbol) : rows;
+  const companyCount = rows.filter(r => r.type === "company").length;
+  const geoCount = rows.filter(r => r.type === "geopolitics").length;
+
+  if (loading) return <div className="dash-loading">Lade News-Dashboard...</div>;
+  if (error) return <div className="dash-error">Fehler: {error}</div>;
+
+  return (
+    <div className="dash">
+      <div className="dash-head">
+        <div>
+          <h3>News Dashboard</h3>
+          <p className="muted">{rows.length} Nachrichten aus deiner Watchlist</p>
+        </div>
+        <div className="dash-filters">
+          <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>Alle ({rows.length})</button>
+          <button className={filter === "company" ? "active" : ""} onClick={() => setFilter("company")}>Unternehmen ({companyCount})</button>
+          <button className={filter === "geopolitics" ? "active" : ""} onClick={() => setFilter("geopolitics")}>Geopolitik ({geoCount})</button>
+        </div>
+      </div>
+      {symbols.length > 0 && (
+        <div className="compare-add">
+          <span className="muted">Filtern:</span>
+          <button className={activeSymbol == null ? "chip-btn active" : "chip-btn"} onClick={() => setActiveSymbol(null)}>Alle</button>
+          {symbols.map(s => (
+            <button key={s} className={activeSymbol === s ? "chip-btn active" : "chip-btn"} onClick={() => setActiveSymbol(activeSymbol === s ? null : s)}>{s}</button>
+          ))}
+        </div>
+      )}
+      {filtered.length === 0 ? (
+        <div className="empty">Keine Nachrichten gefunden. Öffne eine Aktie und klicke auf „Daten aktualisieren", um News zu sammeln.</div>
+      ) : (
+        <div className="news-feed">
+          {filtered.map(r => (
+            <a className="news-card" href={r.link} target="_blank" rel="noreferrer" key={r.id}>
+              {r.thumbnail && <img src={r.thumbnail} alt="" />}
+              <div className="news-body">
+                <div className="news-title">{r.title}</div>
+                <div className="news-meta">
+                  {r.stock && <span className="tag tag-stock">{r.stock.symbol}</span>}
+                  <span className={`tag tag-${r.type}`}>{r.type === "geopolitics" ? "Geopolitik" : "Unternehmen"}</span>
+                  <span>{r.publisher}</span>
+                  <span className="muted">{relTime(r.publishedAt)}</span>
+                </div>
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
