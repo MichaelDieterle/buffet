@@ -2,12 +2,28 @@ const express = require('express');
 const multer = require('multer');
 const csv = require('csv-parser');
 const { Readable } = require('stream');
-const { User, Portfolio, Holding, sequelize } = require('../models');
+const { Portfolio, Holding, sequelize } = require('../models');
 const { authenticate } = require('../middleware/auth');
 const yahooService = require('../services/yahooService');
 const router = express.Router();
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'text/csv' || file.originalname.toLowerCase().endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV files are supported'));
+    }
+  },
+});
+
+function parseNumber(value) {
+  if (value == null || value === '') return NaN;
+  const normalized = String(value).trim().replace(/\s/g, '').replace(',', '.');
+  return Number(normalized);
+}
 
 // GET /api/portfolios/valuation
 router.get('/valuation', authenticate, async (req, res) => {
@@ -18,16 +34,22 @@ router.get('/valuation', authenticate, async (req, res) => {
     });
 
     if (!portfolio) {
-      return res.status(404).json({ error: 'Portfolio not found' });
+      return res.json({
+        totalValue: 0,
+        totalProfit: 0,
+        totalProfitPercent: 0,
+        holdings: [],
+        sectorDistribution: {},
+      });
     }
 
     const tickers = portfolio.holdings.map(h => h.ticker);
-    const quotes = await yahooService.fetchQuotes(tickers);
+    const quotes = tickers.length ? await yahooService.fetchQuotes(tickers) : {};
     const fundamentals = await Promise.all(
-      tickers.map(async t => {
-        const f = await yahooService.fetchFundamentals(t);
-        return { ticker: t, ...f };
-      })
+      tickers.map(async ticker => ({
+        ticker,
+        ...(await yahooService.fetchFundamentals(ticker).catch(() => ({}))),
+      }))
     );
 
     let totalValue = 0;
@@ -35,28 +57,30 @@ router.get('/valuation', authenticate, async (req, res) => {
 
     const valuation = portfolio.holdings.map(h => {
       const quote = quotes[h.ticker];
-      const price = quote?.price || 0;
-      const currentVal = h.quantity * price;
-      const cost = h.quantity * h.averagePrice;
+      const price = Number(quote?.price) || 0;
+      const quantity = Number(h.quantity) || 0;
+      const averagePrice = Number(h.averagePrice) || 0;
+      const currentValue = quantity * price;
+      const cost = quantity * averagePrice;
 
-      totalValue += currentVal;
+      totalValue += currentValue;
       totalCost += cost;
 
       return {
         ticker: h.ticker,
-        quantity: h.quantity,
-        averagePrice: h.averagePrice,
+        quantity,
+        averagePrice,
         currentPrice: price,
-        currentValue: currentVal,
-        profit: currentVal - cost,
-        profitPercent: cost !== 0 ? ((currentVal - cost) / cost) * 100 : 0,
+        currentValue,
+        profit: currentValue - cost,
+        profitPercent: cost !== 0 ? ((currentValue - cost) / cost) * 100 : 0,
         sector: fundamentals.find(f => f.ticker === h.ticker)?.sector || 'Unknown',
       };
     });
 
-    const sectorDist = {};
+    const sectorDistribution = {};
     valuation.forEach(v => {
-      sectorDist[v.sector] = (sectorDist[v.sector] || 0) + v.currentValue;
+      sectorDistribution[v.sector] = (sectorDistribution[v.sector] || 0) + v.currentValue;
     });
 
     res.json({
@@ -64,7 +88,7 @@ router.get('/valuation', authenticate, async (req, res) => {
       totalProfit: totalValue - totalCost,
       totalProfitPercent: totalCost !== 0 ? ((totalValue - totalCost) / totalCost) * 100 : 0,
       holdings: valuation,
-      sectorDistribution: sectorDist,
+      sectorDistribution,
     });
   } catch (err) {
     console.error('Valuation Error:', err);
@@ -79,75 +103,64 @@ router.get('/', authenticate, async (req, res) => {
       where: { userId: req.user.id },
       include: [{ model: Holding, as: 'holdings' }],
     });
-
-    if (!portfolio) {
-      return res.status(404).json({ error: 'Portfolio not found' });
-    }
-
-    res.json(portfolio);
+    res.json(portfolio || { holdings: [] });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
 // POST /api/portfolios/import
 router.post('/import', authenticate, upload.single('file'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
-  }
+  if (!req.file) return res.status(400).json({ error: 'No CSV file uploaded' });
 
   const results = [];
   try {
     await new Promise((resolve, reject) => {
-      const stream = Readable.from(req.file.buffer);
-      stream
+      Readable.from(req.file.buffer)
         .pipe(csv())
-        .on('data', (data) => results.push(data))
+        .on('data', data => results.push(data))
         .on('end', resolve)
         .on('error', reject);
     });
 
+    const holdingsToCreate = results
+      .filter(row => row.Symbol && row.Shares)
+      .map(row => ({
+        ticker: String(row.Symbol).trim().toUpperCase(),
+        quantity: parseNumber(row.Shares),
+        averagePrice: parseNumber(row['Average Price'] || row.Price),
+        currency: row.Currency || 'EUR',
+      }))
+      .filter(row => row.ticker && Number.isFinite(row.quantity) && row.quantity > 0 && Number.isFinite(row.averagePrice) && row.averagePrice >= 0);
+
+    if (!holdingsToCreate.length) {
+      return res.status(400).json({ error: 'No valid holdings found in CSV' });
+    }
+
     const transaction = await sequelize.transaction();
-
     try {
-      // 1. Get or create portfolio for user
-      let [portfolio] = await Portfolio.findOrCreate({
+      const [portfolio] = await Portfolio.findOrCreate({
         where: { userId: req.user.id },
+        defaults: { userId: req.user.id },
         transaction,
       });
 
-      // 2. Clear existing holdings for a fresh import
-      await Holding.destroy({
-        where: { portfolioId: portfolio.id },
-        transaction,
-      });
-
-      // 3. Parse and save holdings
-      const holdingsToCreate = results
-        .filter(row => row.Symbol && row.Shares)
-        .map(row => ({
-          portfolioId: portfolio.id,
-          ticker: row.Symbol,
-          quantity: parseFloat(row.Shares.replace(',', '.')),
-          averagePrice: parseFloat((row['Average Price'] || row.Price || '0').replace(',', '.')),
-          currency: row.Currency || 'EUR',
-        }));
-
-      await Holding.bulkCreate(holdingsToCreate, { transaction });
-
+      await Holding.destroy({ where: { portfolioId: portfolio.id }, transaction });
+      await Holding.bulkCreate(
+        holdingsToCreate.map(h => ({ ...h, portfolioId: portfolio.id })),
+        { transaction }
+      );
       await transaction.commit();
 
-      res.json({
-        message: 'Portfolio imported successfully',
-        count: holdingsToCreate.length,
-      });
+      res.json({ message: 'Portfolio imported successfully', count: holdingsToCreate.length });
     } catch (err) {
       await transaction.rollback();
       throw err;
     }
   } catch (err) {
     console.error('CSV Import Error:', err);
-    res.status(500).json({ error: 'Failed to import CSV' });
+    res.status(500).json({ error: err.message === 'Only CSV files are supported' ? err.message : 'Failed to import CSV' });
   }
 });
 
