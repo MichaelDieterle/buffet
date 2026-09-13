@@ -14,15 +14,8 @@ export default function AuthGate() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const style = document.createElement('style');
-    style.dataset.buffetAuth = 'true';
-    style.textContent = '.btn-google{display:none!important}';
-    document.head.appendChild(style);
     const timer = window.setInterval(() => setToken(localStorage.getItem('token')), 500);
-    return () => {
-      window.clearInterval(timer);
-      style.remove();
-    };
+    return () => window.clearInterval(timer);
   }, []);
 
   const submit = async (event: FormEvent) => {
