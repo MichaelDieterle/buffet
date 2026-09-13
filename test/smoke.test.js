@@ -11,8 +11,8 @@ test('indicator.computeIndicators returns aligned arrays', () => {
   assert.equal(ind.macd.length, 100);
   assert.equal(ind.macd_signal.length, 100);
   assert.equal(ind.macd_hist.length, 100);
-  assert.equal(ind.sma_20[19], 109.5, 'SMA-20 should have a value at index 19');
-  assert.equal(ind.sma_20[18], null, 'SMA-20 should be null before warm-up');
+  assert.equal(ind.sma_20[19], 109.5);
+  assert.equal(ind.sma_20[18], null);
 });
 
 test('indicator.computeIndicators handles short input', () => {
@@ -31,15 +31,15 @@ test('provider loads and exposes the expected API', () => {
   assert.equal(typeof provider.name, 'string');
 });
 
-test('provider toStooqSymbol converts Yahoo symbols to Stooq format', () => {
+test('provider Stooq candidates normalize supported Yahoo symbols', () => {
   const { _internals } = require('../src/services/provider');
-  assert.equal(_internals.toStooqSymbol('AAPL'), 'aapl.us');
-  assert.equal(_internals.toStooqSymbol('SAP.DE'), 'sap.de');
-  assert.equal(_internals.toStooqSymbol('BP.L'), 'bp.uk');
-  assert.equal(_internals.toStooqSymbol('AIR.PA'), 'air.pa');
-  assert.equal(_internals.toStooqSymbol('^GSPC'), null);
-  assert.equal(_internals.toStooqSymbol(''), null);
-  assert.equal(_internals.toStooqSymbol(null), null);
+  assert.deepEqual(_internals.stooqCandidates('AAPL'), ['aapl.us']);
+  assert.deepEqual(_internals.stooqCandidates('SAP.DE'), ['sap.de']);
+  assert.deepEqual(_internals.stooqCandidates('BP.L'), ['bp.l', 'bp.uk']);
+  assert.deepEqual(_internals.stooqCandidates('AIR.PA'), ['air.pa']);
+  assert.deepEqual(_internals.stooqCandidates('^GSPC'), []);
+  assert.deepEqual(_internals.stooqCandidates(''), []);
+  assert.deepEqual(_internals.stooqCandidates(null), []);
 });
 
 test('provider safeNumber handles junk input', () => {
