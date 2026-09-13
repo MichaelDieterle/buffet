@@ -17,6 +17,6 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/src/server.js" },
     { "source": "/mcp(.*)", "destination": "/src/server.js" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/(.*)", "destination": "/client/dist/index.html" }
   ]
 }
