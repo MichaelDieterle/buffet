@@ -1,0 +1,100 @@
+name: Finalize public app
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Remove remaining frontend authentication
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('client/src/App.tsx')
+          s = p.read_text()
+
+          replacements = [
+              (r"\s*const \[token, setToken\] = useState<string \| null>\(localStorage\.getItem\('token'\)\);", ""),
+              (r"\s*useEffect\(\(\) => \{ const params = new URLSearchParams\(window\.location\.search\); const tokenParam = params\.get\('token'\); if \(tokenParam\) \{ localStorage\.setItem\('token', tokenParam\); setToken\(tokenParam\); window\.history\.replaceState\(\{\}, document\.title, window\.location\.pathname\); \} \}, \[\]\);", ""),
+              (r"\s*const handleLogout = \(\) => \{ localStorage\.removeItem\('token'\); setToken\(null\); setView\(\"watchlist\"\); \};", ""),
+              (r"\s*const handleGoogleLogin = \(\) => \{ window\.location\.href = '/api/auth/google'; \};", ""),
+              (r"\s*\{token \? <button className=\"btn-logout\".*?</button> : <button className=\"btn-google\".*?</button>\}", ""),
+              (r"\{view === \"portfolio\" && token \? <PortfolioView /> : \(\s*<div className=\"placeholder\">.*?</div>\s*\)\}", "{view === \"portfolio\" && <PortfolioView />}")
+          ]
+
+          for pattern, repl in replacements:
+              ns, n = re.subn(pattern, repl, s, flags=re.S)
+              if n == 0:
+                  if 'token' in pattern or 'portfolio' in pattern:
+                      print(f'WARNING: pattern did not match: {pattern}')
+              s = ns
+
+          leftovers = [
+              "localStorage.getItem('token')",
+              "localStorage.setItem('token'",
+              "localStorage.removeItem('token'",
+              "setToken(",
+              "handleGoogleLogin",
+              "/api/auth/google",
+              "Sign in with Google",
+              "btn-logout",
+          ]
+          bad = [x for x in leftovers if x in s]
+          if bad:
+              raise SystemExit('Frontend auth remnants remain: ' + ', '.join(bad))
+
+          p.write_text(s)
+          PY
+
+      - name: Remove stale auth references from documentation
+        shell: bash
+        run: |
+          if [ -f CLAUDE.md ]; then
+            python3 - <<'PY'
+            from pathlib import Path
+            p = Path('CLAUDE.md')
+            s = p.read_text()
+            s = s.replace('JWT authentication', 'No user authentication')
+            s = s.replace('JWT Authentication', 'No user authentication')
+            s = s.replace('Google OAuth authentication', 'Public application access')
+            p.write_text(s)
+            PY
+          fi
+
+      - name: Refresh lockfile
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Run backend tests
+        run: npm test
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Commit finalization and remove workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/App.tsx package-lock.json CLAUDE.md .github/workflows/finalize-public-app.yml
+          git rm -f .github/workflows/finalize-public-app.yml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Finalize public app and remove remaining auth"
+          git push origin HEAD:master
