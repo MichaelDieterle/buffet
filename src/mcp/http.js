@@ -38,13 +38,18 @@ function mcpRouter() {
 
   router.use(mcpLimiter);
 
+  // Vercel rewrites can preserve the original /mcp pathname when this router
+  // is mounted from the main Express function. Accept both the router-local
+  // path and the original path so GET health checks and MCP POSTs are stable.
+  const MCP_PATHS = ['/', '/mcp', '/mcp/'];
+
   // Informational response for plain GETs (browsers, health checks).
-  router.get('/', (req, res) => {
+  router.get(MCP_PATHS, (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.json({ name: 'buffet-stock-tracker', protocol: 'streamable-http', status: 'ok' });
   });
 
-  router.post('/', async (req, res) => {
+  router.post(MCP_PATHS, async (req, res) => {
     await handleMcp(req, res);
   });
 
