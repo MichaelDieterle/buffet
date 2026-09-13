@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
 const { sequelize } = require('./models');
@@ -22,15 +23,26 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 app.set('trust proxy', 1);
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS
+const allowedOrigins = (process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
-  : ['http://localhost:3000', 'http://localhost:5173'];
+  : ['http://localhost:3000', 'http://localhost:5173'])
+  .map(origin => origin.trim())
+  .filter(Boolean);
 
 app.use(cors({ origin: allowedOrigins }));
 app.use(helmet());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Zu viele API-Anfragen. Bitte kurz warten.' },
+});
+app.use('/api', apiLimiter);
 
 let dbInitPromise = null;
 let lastDbInitAttempt = 0;
@@ -75,7 +87,7 @@ const startServer = async () => {
       await sequelize.authenticate();
       res.json({ status: 'ok', database: 'connected' });
     } catch (err) {
-      res.status(503).json({ status: 'error', database: 'disconnected', message: err.message });
+      res.status(503).json({ status: 'error', database: 'disconnected', message: 'Database unavailable' });
     }
   });
 
