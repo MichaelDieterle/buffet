@@ -1,0 +1,33 @@
+name: Repair news freshness
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/fix-news-freshness.yml
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch Yahoo news service
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('src/services/yahooService.js')
+          s=p.read_text()
+          pattern=r"async function fetchNews\(symbol\) \{.*?\n\}\n\nasync function fetchCalendar"
+          replacement='''async function fetchNews(symbol) {\n  const key = `news:${symbol}`;\n  const cached = cache.get(key);\n  if (cached) return cached;\n  try {\n    const quote = await yahooFinance.quote(symbol).catch(() => null);\n    const companyName = quote?.longName || quote?.shortName || '';\n    const queries = [...new Set([symbol, companyName].filter(Boolean))];\n    const batches = await Promise.all(queries.map(q => yahooFinance.search(q, { newsCount: 30 }).catch(() => ({ news: [] }))));\n    const byId = new Map();\n    for (const raw of batches) for (const n of (raw.news || [])) {\n      const publishedAt = n.providerPublishTime ? toISO(n.providerPublishTime) : null;\n      if (!n.title || !n.link) continue;\n      byId.set(n.uuid || n.link, { uuid:n.uuid || n.link, title:n.title, publisher:n.publisher, link:n.link, publishedAt, type:classifyArticle(n), relatedTickers:n.relatedTickers || [], thumbnail:n.thumbnail?.resolutions?.[0]?.url || null });\n    }\n    const news = [...byId.values()].sort((a,b) => String(b.publishedAt || '').localeCompare(String(a.publishedAt || '')));\n    const grouped = { all:news, company:news.filter(n=>n.type==='company'), geopolitics:news.filter(n=>n.type==='geopolitics') };\n    cache.set(key, grouped, 60);\n    return grouped;\n  } catch (err) {\n    console.error(`[yahoo] news error for ${symbol}:`, err.message);\n    return { all: [], company: [], geopolitics: [] };\n  }\n}\n\nasync function fetchCalendar'''
+          ns,n=re.subn(pattern,replacement,s,flags=re.S)
+          if n!=1: raise SystemExit(f'fetchNews patch matched {n} blocks')
+          p.write_text(ns)
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/services/yahooService.js
+          git diff --cached --quiet || git commit -m 'fix: make news feed fresher and sorted'
+          git push
