@@ -4,14 +4,6 @@ const api = axios.create({
   baseURL: '/api',
 });
 
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
 export async function fetchQuote(symbol: string) {
   return api.get(`/stocks/${symbol}/quote`).then(r => r.data);
 }
@@ -46,7 +38,6 @@ export async function fetchHistory(symbol: string, days = 90) {
   return api.get(`/stocks/${symbol}/history`, { params: { days } }).then(r => r.data);
 }
 
-// ── Analytics ────────────────────────────────────────────────────────────────
 export async function fetchEarnings() {
   return api.get('/analytics/earnings').then(r => r.data);
 }
@@ -63,7 +54,6 @@ export async function fetchCompare(symbols: string[]) {
   return api.get('/analytics/compare', { params: { symbols: symbols.join(',') } }).then(r => r.data);
 }
 
-// ── Comparisons ──────────────────────────────────────────────────────────────
 export async function listComparisons() {
   return api.get('/comparisons').then(r => r.data);
 }
@@ -86,7 +76,6 @@ export async function deleteComparison(id: number) {
   return api.delete(`/comparisons/${id}`).then(r => r.data);
 }
 
-// ── Portfolios ────────────────────────────────────────────────────────────────
 export async function fetchPortfolio() {
   return api.get('/portfolios').then(r => r.data);
 }
