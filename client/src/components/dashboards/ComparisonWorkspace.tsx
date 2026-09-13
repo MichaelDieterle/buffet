@@ -6,6 +6,7 @@ type CompareRow = { symbol: string; quote: { price: number | null; changePercent
 
 function fmt(n: number | null | undefined, digits = 2) { if (n == null || !Number.isFinite(n)) return "-"; return n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits }); }
 function pct(n: number | null | undefined) { if (n == null || !Number.isFinite(n)) return "-"; return (n >= 0 ? "+" : "") + (n * 100).toFixed(1) + "%"; }
+function pctPoint(n: number | null | undefined) { if (n == null || !Number.isFinite(n)) return "-"; return (n >= 0 ? "+" : "") + n.toFixed(1) + "%"; }
 function big(n: number | null | undefined) { if (n == null || !Number.isFinite(n)) return "-"; const abs = Math.abs(n); if (abs >= 1e12) return (n / 1e12).toFixed(2) + "T"; if (abs >= 1e9) return (n / 1e9).toFixed(2) + "B"; if (abs >= 1e6) return (n / 1e6).toFixed(2) + "M"; if (abs >= 1e3) return (n / 1e3).toFixed(2) + "K"; return String(n); }
 
 export default function ComparisonWorkspace({ watchlist }: { watchlist: Array<{ id: number; symbol: string; name: string }> }) {
@@ -21,9 +22,10 @@ export default function ComparisonWorkspace({ watchlist }: { watchlist: Array<{ 
   const loadList = async () => {
     try {
       const data = await listComparisons();
-      setList(Array.isArray(data) ? data : []);
-      if (data.length && (activeId == null || !data.some((comparison: Comparison) => comparison.id === activeId))) setActiveId(data[0].id);
-      if (!data.length) { setActiveId(null); setCompareData([]); }
+      const comparisons = Array.isArray(data) ? data : [];
+      setList(comparisons);
+      if (comparisons.length && (activeId == null || !comparisons.some((comparison: Comparison) => comparison.id === activeId))) setActiveId(comparisons[0].id);
+      if (!comparisons.length) { setActiveId(null); setCompareData([]); }
     } catch (e: any) {
       setError(e?.response?.data?.error || e?.message || "Laden fehlgeschlagen");
     } finally { setLoading(false); }
@@ -101,7 +103,7 @@ export default function ComparisonWorkspace({ watchlist }: { watchlist: Array<{ 
           {available.length > 0 && <div className="compare-add"><span className="muted">Aktie hinzufügen:</span>{available.slice(0, 8).map(s => <button key={s.id} className="chip-btn" onClick={() => handleAdd(active, s.id)}>+ {s.symbol}</button>)}</div>}
           {active.stocks.length === 0 ? <div className="empty">Dieser Vergleich hat noch keine Aktien.</div> : compareLoading ? <div className="dash-loading">Lade Vergleichsdaten...</div> : compareData.length === 0 ? <div className="empty">Keine Vergleichsdaten geladen.</div> : <div className="table-wrap"><table className="dash-table compare-table"><thead><tr><th />{compareData.map(r => <th key={r.symbol}>{r.symbol}<span className="muted block">{active.stocks.find(s => s.symbol === r.symbol)?.name || ""}</span></th>)}</tr></thead><tbody>
             <tr><td className="row-label">Kurs</td>{compareData.map(r => <td key={r.symbol}><strong>{fmt(r.quote?.price)} {r.quote?.currency || ""}</strong></td>)}</tr>
-            <tr><td className="row-label">Rendite Tag</td>{compareData.map(r => <td key={r.symbol} className={(r.quote?.changePercent ?? 0) >= 0 ? "up" : "down"}>{pct(r.quote?.changePercent)}</td>)}</tr>
+            <tr><td className="row-label">Rendite Tag</td>{compareData.map(r => <td key={r.symbol} className={(r.quote?.changePercent ?? 0) >= 0 ? "up" : "down"}>{pctPoint(r.quote?.changePercent)}</td>)}</tr>
             <tr><td className="row-label">3M-Rendite</td>{compareData.map(r => <td key={r.symbol} className={(r.performance?.changeM3 ?? 0) >= 0 ? "up" : "down"}>{pct(r.performance?.changeM3)}</td>)}</tr>
             <tr><td className="row-label">Marktkap.</td>{compareData.map(r => <td key={r.symbol}>{big(r.quote?.marketCap)}</td>)}</tr>
             <tr><td className="row-label">KGV (PE)</td>{compareData.map(r => <td key={r.symbol}>{fmt(r.fundamentals?.peRatio)}</td>)}</tr>
