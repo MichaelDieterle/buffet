@@ -1,18 +1,34 @@
 const express = require('express');
 const multer = require('multer');
 const csv = require('csv-parser');
+const rateLimit = require('express-rate-limit');
 const { Readable } = require('stream');
 const { Portfolio, Holding, sequelize } = require('../models');
-const yahooService = require('../services/yahooService');
 const provider = require('../services/provider');
 const router = express.Router();
 
+const MAX_CSV_BYTES = 5 * 1024 * 1024;
+const MAX_CSV_ROWS = 20000;
+const MAX_UNIQUE_ASSETS = 100;
+const IMPORT_TIMEOUT_MS = 4500;
+
+const importLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Zu viele CSV-Importe. Bitte später erneut versuchen.' },
+});
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: MAX_CSV_BYTES, files: 1, fields: 10, parts: 12 },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'text/csv' || file.originalname.toLowerCase().endsWith('.csv')) cb(null, true);
-    else cb(new Error('Only CSV files are supported'));
+    const name = String(file.originalname || '').trim().toLowerCase();
+    const mime = String(file.mimetype || '').toLowerCase();
+    const allowedMime = new Set(['text/csv', 'application/csv', 'application/vnd.ms-excel', 'text/plain', 'application/octet-stream']);
+    if (name.endsWith('.csv') && (allowedMime.has(mime) || !mime)) return cb(null, true);
+    cb(new Error('Only CSV files are supported'));
   },
 });
 
@@ -49,6 +65,13 @@ function normalizeName(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise(resolve => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 async function resolveYahooSymbol(row, cache) {
   const raw = String(row.symbol || '').trim().toUpperCase();
   const name = String(row.name || '').trim();
@@ -56,11 +79,12 @@ async function resolveYahooSymbol(row, cache) {
   if (cache.has(cacheKey)) return cache.get(cacheKey);
 
   let resolved = null;
-  const queries = looksLikeIsin(raw) ? [raw, name] : [raw || name];
+  // Trade Republic exports ISINs. Prefer the human-readable company name because
+  // Yahoo search is substantially more reliable for names than for ISIN strings.
+  const queries = [name, raw].filter((query, index, list) => query && list.indexOf(query) === index);
   for (const query of queries) {
-    if (!query) continue;
     try {
-      const results = await provider.searchSymbol(query);
+      const results = await withTimeout(provider.searchSymbol(query), IMPORT_TIMEOUT_MS);
       const equities = (results || []).filter(result => result?.symbol && (!result.quoteType || String(result.quoteType).toUpperCase() === 'EQUITY'));
       const target = normalizeName(name);
       equities.sort((a, b) => {
@@ -108,8 +132,8 @@ router.get('/valuation', async (req, res) => {
     const portfolio = await getGlobalPortfolio({ include: [{ model: Holding, as: 'holdings' }] });
     if (!portfolio) return res.json({ totalValue: 0, totalProfit: 0, totalProfitPercent: 0, holdings: [], sectorDistribution: {} });
     const tickers = portfolio.holdings.map(h => h.ticker);
-    const quotes = tickers.length ? await yahooService.fetchQuotes(tickers) : {};
-    const fundamentals = await Promise.all(tickers.map(async ticker => ({ ticker, ...(await yahooService.fetchFundamentals(ticker).catch(() => ({}))) })));
+    const quotes = tickers.length ? await provider.fetchQuotes(tickers) : {};
+    const fundamentals = await Promise.all(tickers.map(async ticker => ({ ticker, ...(await provider.fetchFundamentals(ticker).catch(() => ({}))) })));
     let totalValue = 0, totalCost = 0;
     const valuation = portfolio.holdings.map(h => {
       const quote = quotes[h.ticker]; const price = Number(quote?.price) || 0; const quantity = Number(h.quantity) || 0; const averagePrice = Number(h.averagePrice) || 0;
@@ -129,18 +153,27 @@ router.get('/', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
-router.post('/import', upload.single('file'), async (req, res) => {
+router.post('/import', importLimiter, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No CSV file uploaded' });
   try {
     const results = [];
     const separator = detectSeparator(req.file.buffer);
     await new Promise((resolve, reject) => {
       Readable.from(req.file.buffer.toString('utf8').replace(/^\uFEFF/, ''))
-        .pipe(csv({ separator, mapHeaders: ({ header }) => String(header).replace(/^\uFEFF/, '').trim().toLowerCase() }))
-        .on('data', data => results.push(normalizeRow(data)))
+        .pipe(csv({ separator, maxRowBytes: 1024 * 1024, mapHeaders: ({ header }) => String(header).replace(/^\uFEFF/, '').trim().toLowerCase() }))
+        .on('data', data => {
+          if (results.length < MAX_CSV_ROWS) results.push(normalizeRow(data));
+        })
         .on('end', resolve)
         .on('error', reject);
     });
+
+    if (!results.length) return res.status(400).json({ error: 'Die CSV-Datei ist leer.' });
+    const headerKeys = new Set(Object.keys(results[0]));
+    const requiredHeaders = ['type', 'asset_class', 'symbol', 'shares', 'price'];
+    if (!requiredHeaders.every(key => headerKeys.has(key))) {
+      return res.status(400).json({ error: 'Ungültiges CSV-Format. Erwartet wird ein Trade-Republic-Transaktionsexport.' });
+    }
 
     const trades = results
       .filter(row => ['BUY', 'SELL'].includes(String(row.type || '').toUpperCase()) && String(row.asset_class || '').toUpperCase() === 'STOCK')
@@ -153,16 +186,25 @@ router.post('/import', upload.single('file'), async (req, res) => {
         price: parseNumber(row.price),
         currency: String(row.currency || 'EUR').trim().toUpperCase(),
       }))
-      .filter(row => row.isin && row.quantity > 0 && row.price >= 0 && Number.isFinite(row.quantity) && Number.isFinite(row.price))
+      .filter(row => looksLikeIsin(row.isin) && row.quantity > 0 && row.price >= 0 && Number.isFinite(row.quantity) && Number.isFinite(row.price))
       .sort((a, b) => String(a.date).localeCompare(String(b.date)));
 
-    if (!trades.length) return res.status(400).json({ error: 'Keine Aktien-Transaktionen (BUY/SELL) in der CSV gefunden.' });
+    if (!trades.length) return res.status(400).json({ error: 'Keine gültigen Aktien-Transaktionen (BUY/SELL) in der CSV gefunden.' });
+
+    const uniqueAssets = [...new Map(trades.map(trade => [`${trade.isin}|${trade.name}`, trade])).values()];
+    if (uniqueAssets.length > MAX_UNIQUE_ASSETS) return res.status(400).json({ error: `Die CSV enthält zu viele unterschiedliche Aktien. Maximal ${MAX_UNIQUE_ASSETS} werden pro Import unterstützt.` });
 
     const cache = new Map();
+    const resolvedAssets = await Promise.all(uniqueAssets.map(async trade => ({
+      key: `${trade.isin}|${trade.name}`,
+      resolved: await resolveYahooSymbol({ symbol: trade.isin, name: trade.name }, cache),
+    })));
+    const resolutionMap = new Map(resolvedAssets.map(item => [item.key, item.resolved]));
+
     const positions = new Map();
     const unresolved = [];
     for (const trade of trades) {
-      const resolved = await resolveYahooSymbol({ symbol: trade.isin, name: trade.name }, cache);
+      const resolved = resolutionMap.get(`${trade.isin}|${trade.name}`);
       if (!resolved) {
         unresolved.push(trade.name || trade.isin);
         continue;
@@ -174,7 +216,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
       .filter(position => position.quantity > 0.00000001)
       .map(position => ({ ticker: position.ticker, quantity: position.quantity, averagePrice: position.averagePrice, currency: position.currency }));
 
-    if (!holdingsToCreate.length) return res.status(400).json({ error: 'Es konnten keine handelbaren Aktien aus der CSV ermittelt werden.' });
+    if (!holdingsToCreate.length) return res.status(400).json({ error: 'Es konnten keine handelbaren Aktien aus der CSV ermittelt werden.', unresolved: [...new Set(unresolved)] });
 
     const transaction = await sequelize.transaction();
     try {
@@ -192,12 +234,15 @@ router.post('/import', upload.single('file'), async (req, res) => {
       message: 'Portfolio imported successfully',
       count: holdingsToCreate.length,
       transactions: trades.length,
-      unresolved,
+      unresolved: [...new Set(unresolved)],
       holdings: holdingsToCreate.map(h => h.ticker),
     });
   } catch (err) {
     console.error('CSV Import Error:', err);
-    res.status(500).json({ error: err.message === 'Only CSV files are supported' ? err.message : 'Failed to import CSV' });
+    if (err?.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'CSV-Datei ist zu groß (maximal 5 MB).' });
+    if (err?.code === 'LIMIT_PART_COUNT' || err?.code === 'LIMIT_FILE_COUNT' || err?.code === 'LIMIT_FIELD_COUNT') return res.status(400).json({ error: 'Ungültiger Datei-Upload.' });
+    if (err.message === 'Only CSV files are supported') return res.status(400).json({ error: err.message });
+    res.status(500).json({ error: 'CSV-Import konnte auf dem Server nicht abgeschlossen werden.' });
   }
 });
 
