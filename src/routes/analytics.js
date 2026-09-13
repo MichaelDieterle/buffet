@@ -28,27 +28,46 @@ router.get('/performance', async (req, res) => {
   }
 });
 
-// GET /api/analytics/scores - fundamental scores for tracked stocks
+// GET /api/analytics/scores - current fundamental scores for the watchlist.
+// Stored snapshots are used as a fallback, but a missing/stale snapshot is
+// replaced with live provider fundamentals so the dashboard does not silently
+// show an empty or weeks-old score.
 router.get('/scores', async (req, res) => {
   try {
     const stocks = await Stock.findAll({ where: { isTracked: true } });
-    const rows = [];
-    for (const stock of stocks) {
+    const rows = await Promise.all(stocks.map(async stock => {
       const latest = await Fundamental.findOne({
         where: { stockId: stock.id },
         order: [['snapshotDate', 'DESC']],
       });
-      rows.push({
+
+      let fundamentals = latest ? latest.get({ plain: true }) : null;
+      const snapshotTime = fundamentals?.snapshotAt ? new Date(fundamentals.snapshotAt).getTime() : 0;
+      const stale = !snapshotTime || (Date.now() - snapshotTime) > 24 * 60 * 60 * 1000;
+
+      if (!fundamentals || stale) {
+        try {
+          const live = await provider.fetchFundamentals(stock.symbol);
+          if (live) {
+            fundamentals = { ...fundamentals, ...live };
+          }
+        } catch (err) {
+          console.warn(`[analytics] live score fundamentals for ${stock.symbol}:`, err.message);
+        }
+      }
+
+      const score = fundamentals ? analytics.scoreFundamental(fundamentals) : null;
+      return {
         id: stock.id,
         symbol: stock.symbol,
         name: stock.name || stock.symbol,
         sector: stock.sector,
         lastSyncedAt: stock.lastSyncedAt,
         snapshotDate: latest ? latest.snapshotDate : null,
-        fundamentals: latest ? latest.get({ plain: true }) : null,
-        score: latest ? analytics.scoreFundamental(latest.get({ plain: true })) : null,
-      });
-    }
+        fundamentals,
+        score,
+      };
+    }));
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -84,9 +103,6 @@ router.get('/compare', validate({ query: schemas.analyticsCompare }), async (req
           console.warn(`[analytics] compare DB for ${symbol}:`, err.message);
         }
 
-        // A comparison needs enough history to calculate the requested 3M
-        // return. DB history may be empty/short for newly tracked stocks, so
-        // use the same provider fallback as the Performance dashboard.
         if (priceHistory.length < 90) {
           try {
             priceHistory = await provider.fetchHistory(symbol, '1y', '1d', 400);
