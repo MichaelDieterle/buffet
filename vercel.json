@@ -5,7 +5,7 @@
   "outputDirectory": "client/dist",
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/index.js" },
-    { "source": "/mcp/:path*", "destination": "/api/mcp.js" },
+    { "source": "/mcp/:path*", "destination": "/api/index.js" },
     { "source": "/((?!api(?:/|$)|mcp(?:/|$)|assets(?:/|$)).*)", "destination": "/index.html" }
   ]
 }
