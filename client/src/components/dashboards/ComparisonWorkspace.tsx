@@ -1,1 +1,209 @@
-import { useEffect, useState } from "react";import {  listComparisons,  createComparison,  updateComparison,  addComparisonStock,  removeComparisonStock,  deleteComparison,  fetchCompare,} from "../../api";type Comparison = {  id: number;  name: string;  description: string | null;  stocks: Array<{ id: number; symbol: string; name: string; ComparisonItem: { weight: number; notes: string | null } }>;};type CompareRow = {  symbol: string;  quote: {    price: number | null; changePercent: number | null; marketCap: number | null;    yearHigh: number | null; yearLow: number | null; volume: number | null; currency: string;  } | null;  fundamentals: {    peRatio: number | null; forwardPe: number | null; pegRatio: number | null; pbRatio: number | null;    dividendYield: number | null; profitMargins: number | null; revenueGrowth: number | null;    debtToEquity: number | null; roc: number | null; targetMeanPrice: number | null;  } | null;  performance: { changeM3: number | null; maxDrawdown: number | null } | null;  stock: { id: number; symbol: string } | null;};function fmt(n: number | null | undefined, digits = 2) {  if (n == null || !Number.isFinite(n)) return "-";  return n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });}function pct(n: number | null | undefined) {  if (n == null || !Number.isFinite(n)) return "-";  return (n >= 0 ? "+" : "") + (n * 100).toFixed(1) + "%";}function big(n: number | null | undefined) {  if (n == null || !Number.isFinite(n)) return "-";  const abs = Math.abs(n);  if (abs >= 1e12) return (n / 1e12).toFixed(2) + "T";  if (abs >= 1e9) return (n / 1e9).toFixed(2) + "B";  if (abs >= 1e6) return (n / 1e6).toFixed(2) + "M";  if (abs >= 1e3) return (n / 1e3).toFixed(2) + "K";  return String(n);}export default function ComparisonWorkspace({ watchlist }: { watchlist: Array<{ id: number; symbol: string; name: string }> }) {  const [list, setList] = useState<Comparison[]>([]);  const [activeId, setActiveId] = useState<number | null>(null);  const [loading, setLoading] = useState(true);  const [error, setError] = useState<string | null>(null);  const [showNew, setShowNew] = useState(false);  const [newName, setNewName] = useState("");  const [compareData, setCompareData] = useState<CompareRow[]>([]);  const [compareLoading, setCompareLoading] = useState(false);  const loadList = async () => {    try {      const data = await listComparisons();      setList(data);      if (data.length && (activeId == null || !data.some(c => c.id === activeId))) {        setActiveId(data[0].id);      }    } catch (e: any) {      setError(e?.message || "Laden fehlgeschlagen");    } finally {      setLoading(false);    }  };  useEffect(() => { loadList(); }, []);  const active = list.find(c => c.id === activeId) || null;  const loadCompare = async (c: Comparison) => {    if (!c.stocks.length) { setCompareData([]); return; }    setCompareLoading(true);    try {      const data = await fetchCompare(c.stocks.map(s => s.symbol));      setCompareData(data);    } catch (e: any) {      setError(e?.message || "Vergleichsdaten konnten nicht geladen werden");    } finally {      setCompareLoading(false);    }  };  useEffect(() => { if (active) loadCompare(active); }, [activeId]);  const handleCreate = async () => {    const name = newName.trim();    if (!name) return;    try {      const c = await createComparison({ name });      setList(prev => [...prev, c]);      setActiveId(c.id);      setShowNew(false);      setNewName("");    } catch (e: any) {      setError(e?.message || "Erstellen fehlgeschlagen");    }  };  const handleAdd = async (c: Comparison, stockId: number) => {    if (c.stocks.some(s => s.id === stockId)) return;    try {      await addComparisonStock(c.id, stockId);      await loadList();      setActiveId(c.id);    } catch (e: any) {      setError(e?.message || "Hinzufügen fehlgeschlagen");    }  };  const handleRemove = async (c: Comparison, stockId: number) => {    try {      await removeComparisonStock(c.id, stockId);      await loadList();      setActiveId(c.id);    } catch (e: any) {      setError(e?.message || "Entfernen fehlgeschlagen");    }  };  const handleDelete = async (c: Comparison) => {    try {      await deleteComparison(c.id);      const data = await listComparisons();      setList(data);      setActiveId(data.length ? data[0].id : null);    } catch (e: any) {      setError(e?.message || "Löschen fehlgeschlagen");    }  };  if (loading) return <div className="dash-loading">Lade Vergleichs-Workspace...</div>;  if (error) return <div className="dash-error">Fehler: {error}</div>;  const watchlistIds = new Set((active?.stocks || []).map(s => s.id));  const available = watchlist.filter(s => !watchlistIds.has(s.id));  return (    <div className="dash">      <div className="dash-head">        <div>          <h3>Comparison Workspace</h3>          <p className="muted">Aktien nebeneinander vergleichen — Kennzahlen in einer Tabelle</p>        </div>        <button className="btn-add" onClick={() => setShowNew(v => !v)}>Neuer Vergleich</button>      </div>      {showNew && (        <div className="compare-new">          <input            className="login-input"            placeholder='Name, z. B. „Tech-Giganten"'            value={newName}            onChange={e => setNewName(e.target.value)}            onKeyDown={e => { if (e.key === "Enter") handleCreate(); }}          />          <button onClick={handleCreate} disabled={!newName.trim()}>Erstellen</button>        </div>      )}      {list.length === 0 ? (        <div className="empty">Noch keine Vergleiche. Erstelle einen und füge Aktien aus deiner Watchlist hinzu.</div>      ) : (        <>          <div className="compare-tabs">            {list.map(c => (              <button                key={c.id}                className={c.id === activeId ? "active" : ""}                onClick={() => setActiveId(c.id)}              >                {c.name} ({c.stocks.length})              </button>            ))}          </div>          {active && (            <>              <div className="compare-meta">                <span className="muted">{active.description || "Keine Beschreibung"}</span>                <div className="actions">                  {active.description == null && (                    <button onClick={async () => {                      const desc = window.prompt("Beschreibung:", "");                      if (desc != null) { await updateComparison(active.id, { description: desc }); loadList(); }                    }}>Bearbeiten</button>                  )}                  <button className="btn-remove" onClick={() => { if (window.confirm(`Vergleich "${active.name}" löschen?`)) handleDelete(active); }}>                    Löschen                  </button>                </div>              </div>              {available.length > 0 && (                <div className="compare-add">                  <span className="muted">Aktie hinzufügen:</span>                  {available.slice(0, 8).map(s => (                    <button key={s.id} className="chip-btn" onClick={() => handleAdd(active, s.id)}>+ {s.symbol}</button>                  ))}                </div>              )}              {active.stocks.length === 0 ? (                <div className="empty">Dieser Vergleich hat noch keine Aktien.</div>              ) : compareLoading ? (                <div className="dash-loading">Lade Vergleichsdaten...</div>              ) : compareData.length === 0 ? (                <div className="empty">Keine Vergleichsdaten geladen.</div>              ) : (                <div className="table-wrap">                  <table className="dash-table compare-table">                    <thead>                      <tr>                        <th />                        {compareData.map(r => (                          <th key={r.symbol}>                            {r.symbol}                            <span className="muted block">{active.stocks.find(s => s.symbol === r.symbol)?.name || ""}</span>                          </th>                        ))}                      </tr>                    </thead>                    <tbody>                      <tr><td className="row-label">Kurs</td>{compareData.map(r => <td key={r.symbol}><strong>{fmt(r.quote?.price)} {r.quote?.currency || ""}</strong></td>)}</tr>                      <tr><td className="row-label">Rendite Tag</td>{compareData.map(r => <td key={r.symbol} className={((r.quote?.changePercent) ?? 0) >= 0 ? "up" : "down"}>{pct(r.quote?.changePercent)}</td>)}</tr>                      <tr><td className="row-label">3M-Rendite</td>{compareData.map(r => <td key={r.symbol} className={((r.performance?.changeM3) ?? 0) >= 0 ? "up" : "down"}>{pct(r.performance?.changeM3)}</td>)}</tr>                      <tr><td className="row-label">Marktkap.</td>{compareData.map(r => <td key={r.symbol}>{big(r.quote?.marketCap)}</td>)}</tr>                      <tr><td className="row-label">KGV (PE)</td>{compareData.map(r => <td key={r.symbol}>{fmt(r.fundamentals?.peRatio)}</td>)}</tr>                      <tr><td className="row-label">Forward PE</td>{compareData.map(r => <td key={r.symbol}>{fmt(r.fundamentals?.forwardPe)}</td>)}</tr>                      <tr><td className="row-label">PEG</td>{compareData.map(r => <td key={r.symbol}>{fmt(r.fundamentals?.pegRatio)}</td>)}</tr>                      <tr><td className="row-label">KBV</td>{compareData.map(r => <td key={r.symbol}>{fmt(r.fundamentals?.pbRatio)}</td>)}</tr>                      <tr><td className="row-label">Dividenden-Yield</td>{compareData.map(r => <td key={r.symbol}>{pct(r.fundamentals?.dividendYield)}</td>)}</tr>                      <tr><td className="row-label">Nettomarge</td>{compareData.map(r => <td key={r.symbol}>{pct(r.fundamentals?.profitMargins)}</td>)}</tr>                      <tr><td className="row-label">Umsatzwachstum</td>{compareData.map(r => <td key={r.symbol}>{pct(r.fundamentals?.revenueGrowth)}</td>)}</tr>                      <tr><td className="row-label">ROE</td>{compareData.map(r => <td key={r.symbol}>{pct(r.fundamentals?.roc)}</td>)}</tr>                      <tr><td className="row-label">Schulden/Equity</td>{compareData.map(r => <td key={r.symbol}>{fmt(r.fundamentals?.debtToEquity)}</td>)}</tr>                      <tr><td className="row-label">Kursziel</td>{compareData.map(r => <td key={r.symbol}>{fmt(r.fundamentals?.targetMeanPrice)}</td>)}</tr>                      <tr><td className="row-label">Aktionen</td>{active.stocks.map(s => <td key={s.id}><button className="btn-remove" onClick={() => handleRemove(active, s.id)}>Entfernen</button></td>)}</tr>                    </tbody>                  </table>                </div>              )}            </>          )}        </>      )}    </div>  );}
+import { useEffect, useState } from "react";
+import { listComparisons, createComparison, updateComparison, addComparisonStock, removeComparisonStock, deleteComparison, fetchCompare } from "../../api";
+
+type Comparison = {
+  id: number;
+  name: string;
+  description: string | null;
+  stocks: Array<{ id: number; symbol: string; name: string; ComparisonItem: { weight: number; notes: string | null } }>;
+};
+
+type CompareRow = {
+  symbol: string;
+  quote: { price: number | null; changePercent: number | null; marketCap: number | null; yearHigh: number | null; yearLow: number | null; volume: number | null; currency: string } | null;
+  fundamentals: { peRatio: number | null; forwardPe: number | null; pegRatio: number | null; pbRatio: number | null; dividendYield: number | null; profitMargins: number | null; revenueGrowth: number | null; debtToEquity: number | null; roc: number | null; targetMeanPrice: number | null } | null;
+  performance: { changeM3: number | null; maxDrawdown: number | null } | null;
+  stock: { id: number; symbol: string } | null;
+};
+
+function fmt(n: number | null | undefined, digits = 2) {
+  if (n == null || !Number.isFinite(n)) return "-";
+  return n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function pct(n: number | null | undefined) {
+  if (n == null || !Number.isFinite(n)) return "-";
+  return (n >= 0 ? "+" : "") + (n * 100).toFixed(1) + "%";
+}
+
+function big(n: number | null | undefined) {
+  if (n == null || !Number.isFinite(n)) return "-";
+  const abs = Math.abs(n);
+  if (abs >= 1e12) return (n / 1e12).toFixed(2) + "T";
+  if (abs >= 1e9) return (n / 1e9).toFixed(2) + "B";
+  if (abs >= 1e6) return (n / 1e6).toFixed(2) + "M";
+  if (abs >= 1e3) return (n / 1e3).toFixed(2) + "K";
+  return String(n);
+}
+
+export default function ComparisonWorkspace({ watchlist }: { watchlist: Array<{ id: number; symbol: string; name: string }> }) {
+  const [list, setList] = useState<Comparison[]>([]);
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showNew, setShowNew] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [compareData, setCompareData] = useState<CompareRow[]>([]);
+  const [compareLoading, setCompareLoading] = useState(false);
+
+  const loadList = async () => {
+    try {
+      const data = await listComparisons();
+      setList(data);
+      if (data.length && (activeId == null || !data.some((comparison: Comparison) => comparison.id === activeId))) {
+        setActiveId(data[0].id);
+      }
+    } catch (e: any) {
+      setError(e?.message || "Laden fehlgeschlagen");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadList(); }, []);
+
+  const active = list.find((comparison) => comparison.id === activeId) || null;
+
+  const loadCompare = async (comparison: Comparison) => {
+    if (!comparison.stocks.length) { setCompareData([]); return; }
+    setCompareLoading(true);
+    try {
+      const data = await fetchCompare(comparison.stocks.map(s => s.symbol));
+      setCompareData(data);
+    } catch (e: any) {
+      setError(e?.message || "Vergleichsdaten konnten nicht geladen werden");
+    } finally {
+      setCompareLoading(false);
+    }
+  };
+
+  useEffect(() => { if (active) loadCompare(active); }, [activeId]);
+
+  const handleCreate = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    try {
+      const c = await createComparison({ name });
+      setList(prev => [...prev, c]);
+      setActiveId(c.id);
+      setShowNew(false);
+      setNewName("");
+    } catch (e: any) {
+      setError(e?.message || "Erstellen fehlgeschlagen");
+    }
+  };
+
+  const handleAdd = async (c: Comparison, stockId: number) => {
+    if (c.stocks.some(s => s.id === stockId)) return;
+    try {
+      await addComparisonStock(c.id, stockId);
+      await loadList();
+      setActiveId(c.id);
+    } catch (e: any) {
+      setError(e?.message || "Hinzufügen fehlgeschlagen");
+    }
+  };
+
+  const handleRemove = async (c: Comparison, stockId: number) => {
+    try {
+      await removeComparisonStock(c.id, stockId);
+      await loadList();
+      setActiveId(c.id);
+    } catch (e: any) {
+      setError(e?.message || "Entfernen fehlgeschlagen");
+    }
+  };
+
+  const handleDelete = async (c: Comparison) => {
+    try {
+      await deleteComparison(c.id);
+      const data = await listComparisons();
+      setList(data);
+      setActiveId(data.length ? data[0].id : null);
+    } catch (e: any) {
+      setError(e?.message || "Löschen fehlgeschlagen");
+    }
+  };
+
+  if (loading) return <div className="dash-loading">Lade Vergleichs-Workspace...</div>;
+  if (error) return <div className="dash-error">Fehler: {error}</div>;
+
+  const watchlistIds = new Set((active?.stocks || []).map(s => s.id));
+  const available = watchlist.filter(s => !watchlistIds.has(s.id));
+
+  return (
+    <div className="dash">
+      <div className="dash-head">
+        <div>
+          <h3>Comparison Workspace</h3>
+          <p className="muted">Aktien nebeneinander vergleichen — Kennzahlen in einer Tabelle</p>
+        </div>
+        <button className="btn-add" onClick={() => setShowNew(v => !v)}>Neuer Vergleich</button>
+      </div>
+      {showNew && (
+        <div className="compare-new">
+          <input className="login-input" placeholder='Name, z. B. „Tech-Giganten"' value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleCreate(); }} />
+          <button onClick={handleCreate} disabled={!newName.trim()}>Erstellen</button>
+        </div>
+      )}
+      {list.length === 0 ? (
+        <div className="empty">Noch keine Vergleiche. Erstelle einen und füge Aktien aus deiner Watchlist hinzu.</div>
+      ) : (
+        <>
+          <div className="compare-tabs">
+            {list.map(c => <button key={c.id} className={c.id === activeId ? "active" : ""} onClick={() => setActiveId(c.id)}>{c.name} ({c.stocks.length})</button>)}
+          </div>
+          {active && (
+            <>
+              <div className="compare-meta">
+                <span className="muted">{active.description || "Keine Beschreibung"}</span>
+                <div className="actions">
+                  {active.description == null && (
+                    <button onClick={async () => { const desc = window.prompt("Beschreibung:", ""); if (desc != null) { await updateComparison(active.id, { description: desc }); loadList(); } }}>Bearbeiten</button>
+                  )}
+                  <button className="btn-remove" onClick={() => { if (window.confirm(`Vergleich "${active.name}" löschen?`)) handleDelete(active); }}>Löschen</button>
+                </div>
+              </div>
+              {available.length > 0 && (
+                <div className="compare-add">
+                  <span className="muted">Aktie hinzufügen:</span>
+                  {available.slice(0, 8).map(s => <button key={s.id} className="chip-btn" onClick={() => handleAdd(active, s.id)}>+ {s.symbol}</button>)}
+                </div>
+              )}
+              {active.stocks.length === 0 ? (
+                <div className="empty">Dieser Vergleich hat noch keine Aktien.</div>
+              ) : compareLoading ? (
+                <div className="dash-loading">Lade Vergleichsdaten...</div>
+              ) : compareData.length === 0 ? (
+                <div className="empty">Keine Vergleichsdaten geladen.</div>
+              ) : (
+                <div className="table-wrap">
+                  <table className="dash-table compare-table">
+                    <thead><tr><th />{compareData.map(r => <th key={r.symbol}>{r.symbol}<span className="muted block">{active.stocks.find(s => s.symbol === r.symbol)?.name || ""}</span></th>)}</tr></thead>
+                    <tbody>
+                      <tr><td className="row-label">Kurs</td>{compareData.map(r => <td key={r.symbol}><strong>{fmt(r.quote?.price)} {r.quote?.currency || ""}</strong></td>)}</tr>
+                      <tr><td className="row-label">Rendite Tag</td>{compareData.map(r => <td key={r.symbol} className={((r.quote?.changePercent) ?? 0) >= 0 ? "up" : "down"}>{pct(r.quote?.changePercent)}</td>)}</tr>
+                      <tr><td className="row-label">3M-Rendite</td>{compareData.map(r => <td key={r.symbol} className={((r.performance?.changeM3) ?? 0) >= 0 ? "up" : "down"}>{pct(r.performance?.changeM3)}</td>)}</tr>
+                      <tr><td className="row-label">Marktkap.</td>{compareData.map(r => <td key={r.symbol}>{big(r.quote?.marketCap)}</td>)}</tr>
+                      <tr><td className="row-label">KGV (PE)</td>{compareData.map(r => <td key={r.symbol}>{fmt(r.fundamentals?.peRatio)}</td>)}</tr>
+                      <tr><td className="row-label">Forward PE</td>{compareData.map(r => <td key={r.symbol}>{fmt(r.fundamentals?.forwardPe)}</td>)}</tr>
+                      <tr><td className="row-label">PEG</td>{compareData.map(r => <td key={r.symbol}>{fmt(r.fundamentals?.pegRatio)}</td>)}</tr>
+                      <tr><td className="row-label">KBV</td>{compareData.map(r => <td key={r.symbol}>{fmt(r.fundamentals?.pbRatio)}</td>)}</tr>
+                      <tr><td className="row-label">Dividenden-Yield</td>{compareData.map(r => <td key={r.symbol}>{pct(r.fundamentals?.dividendYield)}</td>)}</tr>
+                      <tr><td className="row-label">Nettomarge</td>{compareData.map(r => <td key={r.symbol}>{pct(r.fundamentals?.profitMargins)}</td>)}</tr>
+                      <tr><td className="row-label">Umsatzwachstum</td>{compareData.map(r => <td key={r.symbol}>{pct(r.fundamentals?.revenueGrowth)}</td>)}</tr>
+                      <tr><td className="row-label">ROE</td>{compareData.map(r => <td key={r.symbol}>{pct(r.fundamentals?.roc)}</td>)}</tr>
+                      <tr><td className="row-label">Schulden/Equity</td>{compareData.map(r => <td key={r.symbol}>{fmt(r.fundamentals?.debtToEquity)}</td>)}</tr>
+                      <tr><td className="row-label">Kursziel</td>{compareData.map(r => <td key={r.symbol}>{fmt(r.fundamentals?.targetMeanPrice)}</td>)}</tr>
+                      <tr><td className="row-label">Aktionen</td>{active.stocks.map(s => <td key={s.id}><button className="btn-remove" onClick={() => handleRemove(active, s.id)}>Entfernen</button></td>)}</tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
