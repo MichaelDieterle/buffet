@@ -12,8 +12,8 @@ const indicator = require('../services/indicator');
 
 // Rate limiters
 const yahooLimiter = rateLimit({
-  windowMs: 60 * 1000,  // 1 minute
-  max: 60,              // max 60 requests per IP per minute
+  windowMs: 60 * 1000,
+  max: 60,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
@@ -26,20 +26,16 @@ const searchLimiter = rateLimit({
 });
 
 // ── ADMIN ROUTES (must be before /:symbol to avoid shadowing) ─────────────
-// GET refresh job status
 router.get('/_admin/refresh-status', authenticate, isAdmin, async (req, res) => {
   res.json(refresh.getStatus());
 });
 
-// POST trigger a global refresh
 router.post('/_admin/refresh', authenticate, isAdmin, async (req, res) => {
   const result = await refresh.refreshAll();
   res.json(result);
 });
 
 // ── PUBLIC ROUTES ──────────────────────────────────────────────────────────
-
-// GET all stocks with optional filters
 router.get('/', validate({ query: schemas.listStocks }), async (req, res) => {
   try {
     const { sector, limit = 100, offset = 0 } = req.query;
@@ -60,7 +56,6 @@ router.get('/', validate({ query: schemas.listStocks }), async (req, res) => {
   }
 });
 
-// GET search via provider
 router.get('/search/:query', searchLimiter, validate({ params: schemas.searchStocks }), async (req, res) => {
   try {
     const results = await provider.searchSymbol(req.params.query);
@@ -71,7 +66,6 @@ router.get('/search/:query', searchLimiter, validate({ params: schemas.searchSto
   }
 });
 
-// POST create a new stock
 router.post('/', authenticate, validate({ body: schemas.createStock }), async (req, res) => {
   try {
     const { symbol, name, sector, industry, currency, marketCap, fetchOnCreate = true } = req.body;
@@ -94,7 +88,6 @@ router.post('/', authenticate, validate({ body: schemas.createStock }), async (r
   }
 });
 
-// GET stock by symbol
 router.get('/:symbol', validate({ params: schemas.stockSymbol }), async (req, res) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
@@ -106,10 +99,6 @@ router.get('/:symbol', validate({ params: schemas.stockSymbol }), async (req, re
   }
 });
 
-// GET price history for a stock
-// Falls back to the live provider (Yahoo/Alpha Vantage/Stooq) when the symbol
-// is not tracked in the DB, no price history has been stored yet, or the DB is
-// temporarily unavailable.
 router.get('/:symbol/history', validate({ params: schemas.stockSymbol, query: schemas.history }), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
@@ -140,9 +129,7 @@ router.get('/:symbol/history', validate({ params: schemas.stockSymbol, query: sc
 
     if (history.length === 0) {
       const providerData = await provider.fetchHistory(symbol, undefined, '1d', safeDays || 90);
-      if (providerData && providerData.length > 0) {
-        return res.json(providerData);
-      }
+      if (providerData && providerData.length > 0) return res.json(providerData);
       return res.status(404).json({ error: 'Stock not found' });
     }
 
@@ -153,7 +140,6 @@ router.get('/:symbol/history', validate({ params: schemas.stockSymbol, query: sc
   }
 });
 
-// GET live quote
 router.get('/:symbol/quote', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
@@ -166,7 +152,6 @@ router.get('/:symbol/quote', yahooLimiter, validate({ params: schemas.stockSymbo
   }
 });
 
-// GET fundamentals
 router.get('/:symbol/fundamentals', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
@@ -179,7 +164,6 @@ router.get('/:symbol/fundamentals', yahooLimiter, validate({ params: schemas.sto
   }
 });
 
-// GET news
 router.get('/:symbol/news', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
@@ -191,7 +175,6 @@ router.get('/:symbol/news', yahooLimiter, validate({ params: schemas.stockSymbol
   }
 });
 
-// GET calendar events
 router.get('/:symbol/calendar', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
@@ -203,7 +186,6 @@ router.get('/:symbol/calendar', yahooLimiter, validate({ params: schemas.stockSy
   }
 });
 
-// GET yahoo history (no DB write)
 router.get('/:symbol/yahoo-history', yahooLimiter, validate({ params: schemas.stockSymbol, query: schemas.yahooHistory }), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
@@ -216,35 +198,37 @@ router.get('/:symbol/yahoo-history', yahooLimiter, validate({ params: schemas.st
   }
 });
 
-// GET technical indicators
+// GET technical indicators. Use stored history when available, but fall back
+// to the market-data provider so newly tracked stocks still get indicators.
 router.get('/:symbol/indicators', yahooLimiter, validate({ params: schemas.stockSymbol }), async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const stock = await Stock.findOne({ where: { symbol } });
-    if (!stock) return res.status(404).json({ error: 'Stock not found' });
+    let priceHistory = stock
+      ? await PriceHistory.findAll({
+          where: { stockId: stock.id },
+          order: [['date', 'ASC']],
+          limit: 200,
+        })
+      : [];
 
-    const priceHistory = await PriceHistory.findAll({
-      where: { stockId: stock.id },
-      order: [['date', 'ASC']],
-      limit: 200,
-    });
-
-    if (priceHistory.length === 0) {
-      return res.status(404).json({ error: 'No price history available' });
+    if (priceHistory.length < 50) {
+      const providerHistory = await provider.fetchHistory(symbol, '1y', '1d', 200);
+      if (providerHistory.length > priceHistory.length) priceHistory = providerHistory;
     }
 
-    const plain = priceHistory.map(ph => ph.get({ plain: true }));
-    const closes = plain.map(p => parseFloat(p.close));
-    const ind = indicator.computeIndicators(closes);
+    if (priceHistory.length === 0) return res.status(404).json({ error: 'No price history available' });
 
+    const plain = priceHistory.map(ph => typeof ph.get === 'function' ? ph.get({ plain: true }) : ph);
+    const closes = plain.map(p => parseFloat(p.close)).filter(Number.isFinite);
+    if (closes.length === 0) return res.status(404).json({ error: 'No valid closing prices available' });
+
+    const ind = indicator.computeIndicators(closes);
     const latest = {};
     const lastIdx = closes.length - 1;
     for (const key in ind) {
-      if (Array.isArray(ind[key])) {
-        latest[key] = ind[key][lastIdx];
-      } else {
-        latest[key] = ind[key];
-      }
+      if (Array.isArray(ind[key])) latest[key] = ind[key][lastIdx] ?? null;
+      else latest[key] = ind[key];
     }
 
     res.json({ symbol, indicators: latest });
@@ -254,7 +238,6 @@ router.get('/:symbol/indicators', yahooLimiter, validate({ params: schemas.stock
   }
 });
 
-// POST trigger a manual refresh for one stock
 router.post('/:symbol/refresh', authenticate, validate({ params: schemas.stockSymbol }), async (req, res) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
@@ -267,7 +250,6 @@ router.post('/:symbol/refresh', authenticate, validate({ params: schemas.stockSy
   }
 });
 
-// DELETE remove a stock from the watchlist
 router.delete('/:symbol', authenticate, validate({ params: schemas.stockSymbol }), async (req, res) => {
   try {
     const stock = await Stock.findOne({ where: { symbol: req.params.symbol.toUpperCase() } });
