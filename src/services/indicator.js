@@ -44,11 +44,12 @@ function computeIndicators(closes) {
     result.ema_26 = Array(closes.length).fill(null);
   }
 
-  // Relative Strength Index (RSI) 14
-  if (closes.length >= 14) {
+  // Relative Strength Index (RSI) 14. technicalindicators emits its first
+  // value after 14 changes, so the first valid value aligns to input index 14.
+  if (closes.length >= 15) {
     const rsi = new RSI({ period: 14, values: closes });
     result.rsi = Array.from({ length: closes.length }, (_, i) =>
-      i < 13 ? null : rsi.result[i - 13] ?? null
+      i < 14 ? null : rsi.result[i - 14] ?? null
     );
   } else {
     result.rsi = Array(closes.length).fill(null);
