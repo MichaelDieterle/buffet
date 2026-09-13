@@ -211,25 +211,19 @@ async function fetchNews(symbol) {
   const cached = cache.get(key);
   if (cached) return cached;
   try {
-    const raw = await yahooFinance.search(symbol, { newsCount: 30 });
-    const news = (raw.news || []).map(n => ({
-      uuid: n.uuid,
-      title: n.title,
-      publisher: n.publisher,
-      link: n.link,
-      publishedAt: n.providerPublishTime
-        ? toISO(n.providerPublishTime)
-        : null,
-      type: classifyArticle(n),
-      relatedTickers: n.relatedTickers || [],
-      thumbnail: n.thumbnail?.resolutions?.[0]?.url || null,
-    }));
-    const grouped = {
-      all: news,
-      company: news.filter(n => n.type === 'company'),
-      geopolitics: news.filter(n => n.type === 'geopolitics'),
-    };
-    cache.set(key, grouped, 180);
+    const quote = await yahooFinance.quote(symbol).catch(() => null);
+    const companyName = quote?.longName || quote?.shortName || '';
+    const queries = [...new Set([symbol, companyName].filter(Boolean))];
+    const batches = await Promise.all(queries.map(q => yahooFinance.search(q, { newsCount: 30 }).catch(() => ({ news: [] }))));
+    const byId = new Map();
+    for (const raw of batches) for (const n of (raw.news || [])) {
+      const publishedAt = n.providerPublishTime ? toISO(n.providerPublishTime) : null;
+      if (!n.title || !n.link) continue;
+      byId.set(n.uuid || n.link, { uuid:n.uuid || n.link, title:n.title, publisher:n.publisher, link:n.link, publishedAt, type:classifyArticle(n), relatedTickers:n.relatedTickers || [], thumbnail:n.thumbnail?.resolutions?.[0]?.url || null });
+    }
+    const news = [...byId.values()].sort((a,b) => String(b.publishedAt || '').localeCompare(String(a.publishedAt || '')));
+    const grouped = { all:news, company:news.filter(n=>n.type==='company'), geopolitics:news.filter(n=>n.type==='geopolitics') };
+    cache.set(key, grouped, 60);
     return grouped;
   } catch (err) {
     console.error(`[yahoo] news error for ${symbol}:`, err.message);
