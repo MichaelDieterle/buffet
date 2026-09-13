@@ -26,8 +26,6 @@ jobs:
           import re
           p = Path('client/src/App.tsx')
           s = p.read_text()
-
-          # Remove auth state/callbacks and the login/logout UI.
           patterns = [
               r"\s*const \[token, setToken\] = useState<string \| null>\([^;]+\);",
               r"\s*useEffect\(\(\) => \{\s*const params = new URLSearchParams\(window\.location\.search\);.*?\}, \[\]\);",
@@ -38,30 +36,16 @@ jobs:
           ]
           for pat in patterns:
               s = re.sub(pat, '', s, flags=re.S)
-
-          # Replace the portfolio auth gate using the exact current expression shape.
-          s = re.sub(
-              r'\{view === "portfolio" && \(token \? <PortfolioView /> : <div className="placeholder">.*?</div>\)\}',
-              '{view === "portfolio" && <PortfolioView />}',
-              s,
-              flags=re.S,
-          )
-
-          forbidden = [
-              "localStorage.getItem('token')", "localStorage.setItem('token'", "localStorage.removeItem('token'",
-              'setToken(', 'handleGoogleLogin', 'handleLogout', '/api/auth/google', 'Sign in with Google',
-              'btn-google', 'btn-logout'
-          ]
+          s = re.sub(r'\{view === "portfolio" && \(token \? <PortfolioView /> : <div className="placeholder">.*?</div>\)\}', '{view === "portfolio" && <PortfolioView />}', s, flags=re.S)
+          forbidden = ["localStorage.getItem('token')", "localStorage.setItem('token'", "localStorage.removeItem('token'", 'setToken(', 'handleGoogleLogin', 'handleLogout', '/api/auth/google', 'Sign in with Google', 'btn-google', 'btn-logout']
           bad = [x for x in forbidden if x in s]
-          if bad:
-              raise SystemExit('Frontend auth remnants remain: ' + ', '.join(bad))
-          if re.search(r'\btoken\b', s):
-              raise SystemExit('Frontend auth token identifier remains')
+          if bad or re.search(r'\btoken\b', s):
+              raise SystemExit('Frontend auth remnants remain: ' + ', '.join(bad or ['token']))
           p.write_text(s)
           PY
 
-      - name: Refresh lockfile
-        run: npm install --package-lock-only --ignore-scripts
+      - name: Refresh and install dependencies
+        run: npm install --ignore-scripts
 
       - name: Run backend tests
         run: npm test
