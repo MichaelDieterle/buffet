@@ -76,13 +76,25 @@ router.get('/compare', validate({ query: schemas.analyticsCompare }), async (req
           if (stock) {
             priceHistory = await PriceHistory.findAll({
               where: { stockId: stock.id },
-              order: [['date', 'DESC']],
-              limit: 60,
+              order: [['date', 'ASC']],
+              limit: 400,
             });
           }
         } catch (err) {
           console.warn(`[analytics] compare DB for ${symbol}:`, err.message);
         }
+
+        // A comparison needs enough history to calculate the requested 3M
+        // return. DB history may be empty/short for newly tracked stocks, so
+        // use the same provider fallback as the Performance dashboard.
+        if (priceHistory.length < 90) {
+          try {
+            priceHistory = await provider.fetchHistory(symbol, '1y', '1d', 400);
+          } catch (err) {
+            console.warn(`[analytics] compare history for ${symbol}:`, err.message);
+          }
+        }
+
         const [quote, fund] = await Promise.all([
           provider.fetchQuote(symbol).catch(() => null),
           provider.fetchFundamentals(symbol).catch(() => null),
