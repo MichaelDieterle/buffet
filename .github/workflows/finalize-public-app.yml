@@ -24,49 +24,28 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
-
           p = Path('client/src/App.tsx')
           s = p.read_text()
 
-          exact = [
-              "const handleLogout = () => { localStorage.removeItem('token'); setToken(null); setView(\"watchlist\"); };",
-              "const handleGoogleLogin = () => { window.location.href = '/api/auth/google'; };",
+          # Remove auth state/callbacks and the login/logout UI.
+          patterns = [
+              r"\s*const \[token, setToken\] = useState<string \| null>\([^;]+\);",
+              r"\s*useEffect\(\(\) => \{\s*const params = new URLSearchParams\(window\.location\.search\);.*?\}, \[\]\);",
+              r"\s*const handleLogout\s*=\s*\(\)\s*=>\s*\{.*?\};",
+              r"\s*const handleGoogleLogin\s*=\s*\(\)\s*=>\s*\{.*?\};",
+              r"\s*\{token\s*\?\s*<button[^>]*btn-logout[^>]*>.*?</button>\s*:\s*<button[^>]*btn-google[^>]*>.*?</button>\}",
+              r"\s*\{token\s*\?\s*<button[^>]*>.*?</button>\s*:\s*<button[^>]*btn-google[^>]*>.*?</button>\}",
           ]
-          for text in exact:
-              s = s.replace(text, '')
+          for pat in patterns:
+              s = re.sub(pat, '', s, flags=re.S)
 
-          s = re.sub(r"\s*const \[token, setToken\] = useState<string \| null>\(localStorage\.getItem\('token'\)\);", '', s)
-          s = re.sub(r"\s*useEffect\(\(\) => \{ const params = new URLSearchParams\(window\.location\.search\);.*?window\.history\.replaceState\(\{\}, document\.title, window\.location\.pathname\); \} \}, \[\]\);", '', s, flags=re.S)
-          s = re.sub(r"<button[^>]*className=\"btn-(?:google|logout)\"[^>]*>.*?</button>", '', s, flags=re.S)
-
-          start = s.find('{view === "portfolio" &&')
-          if start != -1:
-              depth = 0
-              quote = None
-              escaped = False
-              end = None
-              for i in range(start, len(s)):
-                  ch = s[i]
-                  if quote:
-                      if escaped:
-                          escaped = False
-                      elif ch == '\\\\':
-                          escaped = True
-                      elif ch == quote:
-                          quote = None
-                      continue
-                  if ch in '\"\'`':
-                      quote = ch
-                  elif ch == '{':
-                      depth += 1
-                  elif ch == '}':
-                      depth -= 1
-                      if depth == 0:
-                          end = i + 1
-                          break
-              if end is None:
-                  raise SystemExit('Could not parse portfolio JSX expression')
-              s = s[:start] + '{view === "portfolio" && <PortfolioView />}' + s[end:]
+          # Replace the portfolio auth gate using the exact current expression shape.
+          s = re.sub(
+              r'\{view === "portfolio" && \(token \? <PortfolioView /> : <div className="placeholder">.*?</div>\)\}',
+              '{view === "portfolio" && <PortfolioView />}',
+              s,
+              flags=re.S,
+          )
 
           forbidden = [
               "localStorage.getItem('token')", "localStorage.setItem('token'", "localStorage.removeItem('token'",
@@ -78,24 +57,8 @@ jobs:
               raise SystemExit('Frontend auth remnants remain: ' + ', '.join(bad))
           if re.search(r'\btoken\b', s):
               raise SystemExit('Frontend auth token identifier remains')
-
           p.write_text(s)
           PY
-
-      - name: Remove stale auth references from documentation
-        shell: bash
-        run: |
-          if [ -f CLAUDE.md ]; then
-            python3 - <<'PY'
-            from pathlib import Path
-            p = Path('CLAUDE.md')
-            s = p.read_text()
-            s = s.replace('JWT authentication', 'No user authentication')
-            s = s.replace('JWT Authentication', 'No user authentication')
-            s = s.replace('Google OAuth authentication', 'Public application access')
-            p.write_text(s)
-            PY
-          fi
 
       - name: Refresh lockfile
         run: npm install --package-lock-only --ignore-scripts
@@ -113,9 +76,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add client/src/App.tsx package-lock.json CLAUDE.md .github/workflows/finalize-public-app.yml
           git rm -f .github/workflows/finalize-public-app.yml
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-            exit 0
-          fi
+          if git diff --cached --quiet; then exit 0; fi
           git commit -m "Finalize public app and remove remaining auth"
           git push origin HEAD:master
