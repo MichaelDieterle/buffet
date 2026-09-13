@@ -1,22 +1,10 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "src/server.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "client/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "client/dist",
-        "zeroConfig": true
-      }
-    }
-  ],
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build",
+  "outputDirectory": "client/dist",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/src/server.js" },
-    { "source": "/mcp(.*)", "destination": "/src/server.js" },
-    { "source": "/(.*)", "destination": "/client/dist/index.html" }
+    { "source": "/api/:path*", "destination": "/api" },
+    { "source": "/mcp/:path*", "destination": "/api" },
+    { "source": "/((?!api(?:/|$)|mcp(?:/|$)|assets(?:/|$)).*)", "destination": "/index.html" }
   ]
 }
