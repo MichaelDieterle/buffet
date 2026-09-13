@@ -1,4 +1,3 @@
-import React from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 
 interface Holding {
@@ -16,16 +15,14 @@ interface PortfolioAnalyticsProps {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
 
-export function PortfolioAnalytics({ holdings, sectorDistribution, totalValue }: PortfolioAnalyticsProps) {
-  const sectorData = Object.entries(sectorDistribution).map(([name, value]) => ({
-    name,
-    value,
-  }));
+function formatCurrency(value: unknown) {
+  const number = typeof value === 'number' ? value : Number(value ?? 0);
+  return `${number.toLocaleString()} €`;
+}
 
-  const performanceData = holdings.map(h => ({
-    ticker: h.ticker,
-    profit: h.profit,
-  }));
+export function PortfolioAnalytics({ holdings, sectorDistribution }: PortfolioAnalyticsProps) {
+  const sectorData = Object.entries(sectorDistribution).map(([name, value]) => ({ name, value }));
+  const performanceData = holdings.map(h => ({ ticker: h.ticker, profit: h.profit }));
 
   return (
     <div className="portfolio-analytics">
@@ -35,20 +32,10 @@ export function PortfolioAnalytics({ holdings, sectorDistribution, totalValue }:
           <div style={{ width: '100%', height: 300 }}>
             <ResponsiveContainer>
               <PieChart>
-                <Pie
-                  data={sectorData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {sectorData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
+                <Pie data={sectorData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                  {sectorData.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                 </Pie>
-                <Tooltip formatter={(value: number) => `${value.toLocaleString()} €`} />
+                <Tooltip formatter={formatCurrency} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
@@ -63,7 +50,7 @@ export function PortfolioAnalytics({ holdings, sectorDistribution, totalValue }:
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="ticker" />
                 <YAxis />
-                <Tooltip formatter={(value: number) => `${value.toLocaleString()} €`} />
+                <Tooltip formatter={formatCurrency} />
                 <Legend />
                 <Bar dataKey="profit" fill="#82ca9d" name="Profit/Loss" />
               </BarChart>
