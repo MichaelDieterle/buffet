@@ -22,15 +22,15 @@ const schemas = {
   stockSymbol: z.object({
     symbol: z.string().min(1),
   }),
+  // These schemas validate only query-string fields. The stock symbol is a
+  // path parameter and is validated separately with stockSymbol.
   history: z.object({
-    symbol: z.string().min(1),
     start: z.string().optional(),
     end: z.string().optional(),
     limit: z.coerce.number().int().min(1).max(500).optional(),
     days: z.coerce.number().int().min(1).optional(),
   }),
   yahooHistory: z.object({
-    symbol: z.string().min(1),
     range: z.string().optional(),
     interval: z.string().optional(),
   }),
