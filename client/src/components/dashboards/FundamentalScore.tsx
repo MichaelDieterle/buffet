@@ -1,1 +1,88 @@
-import { useEffect, useMemo, useState } from "react";import { fetchScores } from "../../api";type ScoreRow = {  id: number;  symbol: string;  name: string;  sector: string | null;  snapshotDate: string | null;  score: {    total: number | null;    coverage: number;    parts: {      valuation: number | null;      profitability: number | null;      growth: number | null;      health: number | null;      dividend: number | null;      analyst: number | null;    };  } | null;  fundamentals: {    peRatio: number | null;    dividendYield: number | null;    targetMeanPrice: number | null;    price: number | null;  } | null;};function grade(n: number | null) {  if (n == null) return { label: "–", cls: "" };  if (n >= 80) return { label: "A", cls: "grade-a" };  if (n >= 65) return { label: "B", cls: "grade-b" };  if (n >= 50) return { label: "C", cls: "grade-c" };  if (n >= 35) return { label: "D", cls: "grade-d" };  return { label: "E", cls: "grade-e" };}function barVal(n: number | null) {  return n == null ? 0 : n;}export default function FundamentalScore() {  const [rows, setRows] = useState<ScoreRow[]>([]);  const [loading, setLoading] = useState(true);  const [error, setError] = useState<string | null>(null);  useEffect(() => {    let cancelled = false;    setLoading(true);    fetchScores()      .then((data: ScoreRow[]) => { if (!cancelled) setRows(data); })      .catch((e: any) => { if (!cancelled) setError(e?.message || "Laden fehlgeschlagen"); })      .finally(() => { if (!cancelled) setLoading(false); });    return () => { cancelled = true; };  }, []);  const ranked = useMemo(() => [...rows].sort((a, b) => (b.score?.total ?? -1) - (a.score?.total ?? -1)), [rows]);  if (loading) return <div className="dash-loading">Lade Fundamental Scores...</div>;  if (error) return <div className="dash-error">Fehler: {error}</div>;  const partsL = [    ["valuation", "Bewertung"],    ["profitability", "Profitabilität"],    ["growth", "Wachstum"],    ["health", "Bilanz"],    ["dividend", "Dividende"],    ["analyst", "Analysten"],  ] as const;  return (    <div className="dash">      <div className="dash-head">        <div>          <h3>Fundamental Score</h3>          <p className="muted">Bewertung, Marge, Wachstum, Bilanz, Dividende und Analystenmeinung — 0–100 Punkte</p>        </div>      </div>      {ranked.length === 0 ? (        <div className="empty">Noch keine Fundamentaldaten. Klicke bei einer Aktie auf „Daten aktualisieren".</div>      ) : (        <div className="score-grid">          {ranked.map(r => {            const g = grade(r.score?.total ?? null);            return (              <div className="score-card" key={r.id}>                <div className="score-head">                  <div>                    <strong>{r.symbol}</strong>                    <span className="muted block">{r.name}</span>                  </div>                  <div className={`score-grade ${g.cls}`}>{g.label}</div>                </div>                <div className="score-total">                  <div className="score-total-num">{r.score?.total ?? "–"}</div>                  <div className="score-total-bar">                    <div style={{ width: barVal(r.score?.total) + "%" }} />                  </div>                  <span className="muted">Abdeckung {r.score?.coverage ?? 0}%</span>                </div>                <div className="score-parts">                  {partsL.map(([key, label]) => (                    <div className="score-part" key={key}>                      <span>{label}</span>                      <div className="score-part-bar">                        <div style={{ width: barVal(r.score?.parts?.[key] ?? null) + "%" }} />                      </div>                      <strong>{r.score?.parts?.[key] != null ? Math.round(r.score.parts[key] as number) : "–"}</strong>                    </div>                  ))}                </div>              </div>            );          })}        </div>      )}    </div>  );}
+import { useEffect, useMemo, useState } from "react";
+import { fetchScores } from "../../api";
+
+type ScoreRow = {
+  id: number;
+  symbol: string;
+  name: string;
+  sector: string | null;
+  snapshotDate: string | null;
+  score: { total: number | null; coverage: number; parts: { valuation: number | null; profitability: number | null; growth: number | null; health: number | null; dividend: number | null; analyst: number | null } } | null;
+  fundamentals: { peRatio: number | null; dividendYield: number | null; targetMeanPrice: number | null; price: number | null } | null;
+};
+
+function grade(n: number | null) {
+  if (n == null) return { label: "–", cls: "" };
+  if (n >= 80) return { label: "A", cls: "grade-a" };
+  if (n >= 65) return { label: "B", cls: "grade-b" };
+  if (n >= 50) return { label: "C", cls: "grade-c" };
+  if (n >= 35) return { label: "D", cls: "grade-d" };
+  return { label: "E", cls: "grade-e" };
+}
+
+function barVal(n: number | null) { return n == null ? 0 : n; }
+
+export default function FundamentalScore() {
+  const [rows, setRows] = useState<ScoreRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchScores()
+      .then((data: ScoreRow[]) => { if (!cancelled) setRows(data); })
+      .catch((e: any) => { if (!cancelled) setError(e?.message || "Laden fehlgeschlagen"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const ranked = useMemo(() => [...rows].sort((a, b) => (b.score?.total ?? -1) - (a.score?.total ?? -1)), [rows]);
+
+  if (loading) return <div className="dash-loading">Lade Fundamental Scores...</div>;
+  if (error) return <div className="dash-error">Fehler: {error}</div>;
+
+  const partsL = [
+    ["valuation", "Bewertung"], ["profitability", "Profitabilität"], ["growth", "Wachstum"],
+    ["health", "Bilanz"], ["dividend", "Dividende"], ["analyst", "Analysten"],
+  ] as const;
+
+  return (
+    <div className="dash">
+      <div className="dash-head">
+        <div>
+          <h3>Fundamental Score</h3>
+          <p className="muted">Bewertung, Marge, Wachstum, Bilanz, Dividende und Analystenmeinung — 0–100 Punkte</p>
+        </div>
+      </div>
+      {ranked.length === 0 ? (
+        <div className="empty">Noch keine Fundamentaldaten. Klicke bei einer Aktie auf „Daten aktualisieren".</div>
+      ) : (
+        <div className="score-grid">
+          {ranked.map(r => {
+            const g = grade(r.score?.total ?? null);
+            return (
+              <div className="score-card" key={r.id}>
+                <div className="score-head"><div><strong>{r.symbol}</strong><span className="muted block">{r.name}</span></div><div className={`score-grade ${g.cls}`}>{g.label}</div></div>
+                <div className="score-total">
+                  <div className="score-total-num">{r.score?.total ?? "–"}</div>
+                  <div className="score-total-bar"><div style={{ width: barVal(r.score?.total ?? null) + "%" }} /></div>
+                  <span className="muted">Abdeckung {r.score?.coverage ?? 0}%</span>
+                </div>
+                <div className="score-parts">
+                  {partsL.map(([key, label]) => (
+                    <div className="score-part" key={key}>
+                      <span>{label}</span>
+                      <div className="score-part-bar"><div style={{ width: barVal(r.score?.parts?.[key] ?? null) + "%" }} /></div>
+                      <strong>{r.score?.parts?.[key] != null ? Math.round(r.score.parts[key] as number) : "–"}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
