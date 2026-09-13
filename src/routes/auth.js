@@ -38,7 +38,6 @@ router.post('/register', validate(authSchemas.register), async (req, res) => {
     const existing = await User.findOne({ where: { username } });
     if (existing) return res.status(409).json({ error: 'Username already taken' });
 
-    // Public registration can only create normal user accounts.
     const user = await User.create({ username, password, role: 'user' });
     const token = signToken(user);
     res.status(201).json({
@@ -70,6 +69,12 @@ router.post('/login', validate(authSchemas.login), async (req, res) => {
     console.error('[auth] login failed:', err.message);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+// Google OAuth was intentionally removed. Keep explicit responses so old links
+// do not silently fall through to the SPA.
+router.all(['/google', '/google/callback'], (_req, res) => {
+  res.status(410).json({ error: 'Google authentication is no longer supported. Use username and password.' });
 });
 
 module.exports = router;
